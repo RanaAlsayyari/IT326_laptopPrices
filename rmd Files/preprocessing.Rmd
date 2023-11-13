@@ -1,0 +1,718 @@
+---
+title: "PHASE 2"
+output: html_notebook
+ml_document:
+  html_notebook: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+# DATA MINING PHASE 2
+
+## Main Goal :
+
+### nowdays laptops are important because they offer portability, convenience, and functionality. since they allow us to work, study, connect with other people it become an essential tools for us to do our work and study, and the most important factor to choose a laptop is the price so our role in this project is predict prices from different companies depending on several feature such as type name, CPU, GPU, screen resolution and more. we chose this dataset because we think it will help us build a classification and clustering model that will help others choose the appropriate laptop that satisfies their prefrences and budget.
+
+## Dataset source :
+
+### <https://www.kaggle.com/datasets/muhammetvarl/laptop-price>
+
+## Number of objects :
+
+### 1303
+
+## Number of attribute :
+
+### 13
+
+## dataset summary :
+
+##### The dataset includes :
+
+##### 1- Laptop ID : Numeric - a unique number identifies laptops - has values from 1 to 1303.
+
+##### 2- Company : String - laptop manufacture - include companies like dell, HP, lenovo, and asos ... etc.
+
+##### 3- Product : String - brand and model for each company.
+
+##### 4- TypeName : String - type of the laptop ( notebook,ultrabook,gaming...etc).
+
+##### 5- Inches : Numeric - screen size - ranges between 10.1 to 18.4
+
+##### 6- ScreenResulotion : Numeric - screen resulotion - ranges between 1366x768 and 3840x2160.
+
+##### 7- CPU : String - central processing unit - Intel core i3, intel core i5, intel i5 and more.
+
+##### 8- Ram : numeric - laptop ram - 8GB, 16GB, 4GB, 2GB, 12GB, 6GB, 32GB, 24GB, and 64GB.
+
+##### 9- Memory : String - hard disk / SSD memory - HDD, SSD, flash storage and hybrid.
+
+##### 10- Gpu : String - graphics processing unit - AMD, Nvidia, and Intel.
+
+##### 11- OpSys : String - operating system -macOS, No OS, Windows 10, Mac OS X, Linux, Android, Windows 10 S, Chrome OS, and Windows.
+
+##### 12- Weight : numeric - laptop weight - ranges between 0.81Kg to 4.7Kg.
+
+##### 13- Price_euros : Numeric - price in euro - ranges between 174 to 6099 euros.
+
+## class lables :
+
+##### inexpensive
+
+##### ideal price
+
+##### moderetly expensive
+
+##### expinsive
+
+##### very expensive
+
+##### importing needed packages
+
+```{r}
+library(stringr)
+library(tidyr)
+library(data.table)
+
+library(dplyr)
+library(outliers)
+library(ggplot2)
+library(plotly)
+```
+
+#### dataset importing
+
+```{r}
+library(readr)
+dataset <- read.csv("dataset.csv")
+View(dataset)
+```
+
+### Raw data set
+
+```{r}
+# Display the first 10 rows
+head(dataset, 10)
+
+# Display the last 10 rows
+tail(dataset, 10)
+```
+### 1: Missing values and duplicated rows
+
+##### There are no missing values in our dataset and Nor duplicated rows
+
+```{r}
+#check for missing values
+sum(is.na(dataset))
+
+
+cat("Number of duplicate rows: ")
+sum(duplicated(dataset))
+```
+### 2: converting to numeric
+
+##### We convert Weight attribute from char to numeric by removing the "kg" suffix to apply any needed mathematical operations.
+
+```{r}
+#Find unique values in Weight
+unique(dataset$Weight)
+#sub the kg from Weight attribute
+dataset$Weight <- gsub("kg", "", dataset$Weight)
+#convert Weight to numeric
+dataset$Weight<- as.numeric(as.character(dataset$Weight))
+
+#Find unique values in Ram
+unique(dataset$Ram)
+#Encode the Ram attribute
+dataset$Ram=factor(dataset$Ram,levels=c("8GB","16GB","4GB","2GB","12GB","6GB","32GB","24GB","64GB"),labels=c("8","16","4","2","12","6","32","24","64"))
+dataset$Ram<- as.numeric(as.character(dataset$Ram))
+
+#dataset$OpSys<- as.numeric(as.character(dataset$OpSys))
+```
+##### correcting the type mismatch of Screen resolution to numeric
+
+##### find the Screen resolution product (first and second factors cut from the other nominal explenation)
+
+```{r}
+dataset$ScreenResolutionupdate <- gsub(".* ", "", dataset$ScreenResolution)
+
+
+#find the Screen resulotion product (first factor)
+dataset$ScreenResolutionFactor1 <- gsub(".*x", "", dataset$ScreenResolutionupdate)
+
+#find the Screen resolution product (second factor)
+dataset$ScreenResolutionfactor2 <- gsub("x.*", "", dataset$ScreenResolutionupdate)
+
+#enforce numeric type to both attribtes to apply mathematical operations
+dataset$ScreenResolutionFactor1<- as.numeric(as.character(dataset$ScreenResolutionFactor1))
+dataset$ScreenResolutionfactor2<- as.numeric(as.character(dataset$ScreenResolutionfactor2))
+
+#apply the mathematical operation to the ScreenResolution attribute
+dataset$ScreenResolution <- dataset$ScreenResolutionFactor1*dataset$ScreenResolutionfactor2 
+
+#delete added attribute as the trigger redunduncy
+dataset$ScreenResolutionFactor1<-NULL
+dataset$ScreenResolutionfactor2 <-NULL
+dataset$ScreenResolutionupdate<-NULL
+
+```
+
+
+### 3: Detecting outliers
+
+
+##### We got 29 row as box plot outliers for Price_euros. All detected outliers were above the maximume value for price. After analyzing them we saw that the highest price was the laptop with id 200, which was 6099 €, we checked its specifications, and noticed that it was gaming device with touchscreen, 4k screen resolution, i7 CPU, 32 GB Ram, and 1TB SSD memory. After analyzing all the rows, we concluded that each laptop price and its specifications were reasonable, and there is no reason to delete them as outliers.
+
+```{r}
+#Price_euros
+bp_price <- boxplot(dataset$Price_euros,
+        ylab = "Price_euros",
+        main = "Price_euros" )
+
+outliers <- bp_price$out
+price_Outliers <- dataset[dataset$Price_euros %in% outliers, c(1:12)]
+
+# Display the first 10 rows
+head(price_Outliers, 5)
+
+#Maximume outlier Price_euros
+cat("The Maximum Outlier in Price_euros: ")
+max(price_Outliers$Price_euros)
+
+cat("Maximum value for price: ")
+bp_price$stats[5]
+
+```
+##### We analyzed the 46 Weight outliers. All detected outliers were above the maximume value. We noticed that most laptops are of type gaming and of 17 inches. The maximume weight is 4.7 kg, and after checking all the rows and analyzing the scatter plot between inches and weight, we concluded that there is no reason to delete them as outliers since high weight for gaming laptops with large screens (inches) is normal.
+
+```{r}
+plot(dataset$Inches, dataset$Weight, xlab="Inches", ylab="Weight")
+```
+```{r}
+#Weight
+bp_weight <- boxplot(dataset$Weight,
+        ylab = "weight",
+        main = "weight" )
+
+outliers <- bp_weight$out
+weight_Outliers <- dataset[dataset$Weight %in% outliers, c(1:12)]
+
+# Display the first 10 rows
+head(weight_Outliers, 5)
+
+#Maximum outlier weight
+cat("The Maximum Outlier in weight: ")
+max(weight_Outliers$Weight)
+
+cat("Maximum value for weight: ")
+bp_weight$stats[5]
+
+```
+##### The outliers detected from the boxplot was 1 above the maximume value, and 38 outlier under the minumum value. The laptop above the maximum value was 18.4 inches gaming laptop and 4.4 kg. For the minumum values, they were all from type (2 in 1 Convertible),(Ultrabook), and (Netbook) which they are popular for their light weight and small sizes. From the the previous scatter plot with the positive correlation between inches and weight, We decided that the detected outlier will not be removed since they are not really outliers.
+
+```{r}
+#Inches
+bp_Inches <- boxplot(dataset$Inches,
+        ylab = "Inches",
+        main = "Inches" )
+
+outliers <- bp_Inches$out
+Inches_Outliers <- dataset[dataset$Inches %in% outliers, c(1:12)]
+
+# Display the first 10 rows
+head(Inches_Outliers, 5)
+
+#Maximum outlier Inches
+cat("The Maximum Outlier in Inches: ")
+max(Inches_Outliers$Inches)
+
+cat("Maximum value for Inches: ")
+bp_Inches$stats[5]
+
+cat("Minumum value for Inches: ")
+bp_Inches$stats[1]
+
+```
+
+### 4: Data simplification and adding attributes
+
+### Data simplification
+
+#### Data simplification on CPU and GPU
+
+##### CPU and GPU attributes are nominal, CPU has 118 unique value, and GPU has 110 unique value. We could not use them until we categorized CPU into 10 categories, and GPU into 7. We used the the brand and generation to categorize them. This step enabled us to generate usefull graphs out of these attributes.
+
+```{r}
+cat("unique values in CPU: ")
+length(unique(dataset$Cpu))
+cat("unique values in GPU: ")
+length(unique(dataset$Gpu))
+
+```
+
+```{r}
+# simplifying CPU types
+pattern_categories <- data.frame(
+              Cpu = c("Intel Core i3 .*","Intel Core i5 .*", "Intel Core i7 .*", "Intel Core i9 .*",
+                          "Intel Core M.*", "(?i)Intel Atom x.*",
+                          "Intel Celeron .*","Intel Pentium .*",
+                          "AMD A.*", "AMD E.*"),
+                Category = c("Intel Core i3", "Intel Core i5", "Intel Core i7","Intel Core i9",
+                             "Intel Core M", "Intel Atom x",
+                             "Intel Celeron", "Intel Pentium", 
+                             "AMD A-Series", "AMD E-Series")
+  )
+# assigning categories based on patterns
+assign_category <- function(Cpu) {
+  for (i in 1:nrow(pattern_categories)) {
+    if (grepl(pattern_categories$Cpu[i], Cpu)) {
+      return(pattern_categories$Category[i])
+    }
+  }
+  return("Other")  # if no patterns match, it assigns it to "Other"
+}
+
+# Create a new column with CPU categories
+dataset$CPU <- sapply(dataset$Cpu, assign_category)
+dataset$Cpu<-NULL
+
+```
+
+```{r}
+# simplifying GPU types
+gpu_pattern_categories <- data.frame(
+  Gpu = c("Intel Iris.*", "Intel HD Graphics.*", "AMD Radeon.*", "Nvidia GeForce.*", "Intel UHD Graphics.*", "Nvidia Quadro .*"),
+  Category = c("Intel Iris Graphics", "Intel HD Graphics", "AMD Radeon Graphics", "Nvidia GeForce Graphics", "Intel UHD Graphics", "Nvidia Quadro")
+)
+
+# Function to assign GPU categories based on patterns
+assign_gpu_category <- function(gpu_name) {
+  for (i in 1:nrow(gpu_pattern_categories)) {
+    if (grepl(gpu_pattern_categories$Gpu[i], gpu_name)) {
+      return(gpu_pattern_categories$Category[i])
+    }
+  }
+  return("Other")  # Assign to "Other" category if no patterns match
+}
+
+
+# Create a new column "Gpu_Category"
+dataset$GPU <- sapply(dataset$Gpu, assign_gpu_category)
+dataset$Gpu<-NULL
+
+```
+
+#### Jitter plot for CPU and GPU
+
+##### Most frequent CPU types are "Intel Core i7" and "Intel Core i5". "Intel Core i3", "AMD A-series", and "Intel Celeron" can be labeled as Ideal price.
+
+```{r}
+# Plot CPU
+ggplot(dataset, aes(x = CPU, y = Price_euros)) +
+  geom_jitter(width = 0.2, height = 0) +
+  labs(title = "Jitter Plot of Laptop Prices by CPU Type", x = "CPU Type", y = "Price (in Euros)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+##### Most frequent GPU types are "Intel HD Graphics" and "Nvidia GeForce Graphics". "AMD Radeon Graphics" can be labeled as moderately expensive.
+
+```{r}
+#plot GPU
+ggplot(dataset, aes(x = GPU, y = Price_euros)) +
+  geom_jitter(width = 0.2, height = 0) +
+  labs(title = "Jitter Plot of Laptop Prices by GPU Category", x = "GPU Category", y = "Price (in Euros)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45,hjust=1))
+
+```
+#### Data simplification on Memory
+
+##### Since Memory attribute had more than one information, we split the Memory attribute into: Memory type, and memory size -where sizes unit is in GB- to show the effect of each information.
+
+##### We can notice that "Flash Storage", "HDD", and "Hybrid" is in the cheaper range. "SSD has a large price range so it can be categorized as"Low", "Average" or "High".For "SSD&HDD" we see that its price range is large, it can be categorized as "Average" or "High".
+
+##### Memory sizes that are (16,32,64)GB can be categorized as "Low". For (500,1000)GB it can be described as "Low" or "Average". For (256,1024,1128)GB it can be categorized as "Average" or "High". For (512,1256)GB it can be categorized as "High".
+
+```{r}
+# categorizing Memory types
+dataset$Memory=factor(dataset$Memory,levels=c("128GB SSD" ,  "128GB Flash Storage" ,         
+                                              "256GB SSD" ,                    "512GB SSD",                    
+                                              "500GB HDD",                     "256GB Flash Storage" ,         
+                                              "1TB HDD",                       "32GB Flash Storage"  ,         
+                                              "128GB SSD +  1TB HDD",          "256GB SSD +  256GB SSD",       
+                                              "64GB Flash Storage",            "256GB SSD +  1TB HDD",         
+                                              "256GB SSD +  2TB HDD" ,         "32GB SSD",                     
+                                              "2TB HDD",                       "64GB SSD",                     
+                                              "1.0TB Hybrid",                  "512GB SSD +  1TB HDD",         
+                                              "1TB SSD" ,                      "256GB SSD +  500GB HDD",       
+                                              "128GB SSD +  2TB HDD",          "512GB SSD +  512GB SSD",       
+                                              "16GB SSD",                      "16GB Flash Storage",           
+                                              "512GB SSD +  256GB SSD" ,       "512GB SSD +  2TB HDD",         
+                                              "64GB Flash Storage +  1TB HDD", "180GB SSD",                    
+                                              "1TB HDD +  1TB HDD" ,           "32GB HDD",                     
+                                              "1TB SSD +  1TB HDD" ,           "512GB Flash Storage",          
+                                              "128GB HDD",                     "240GB SSD",                    
+                                              "8GB SSD",                       "508GB Hybrid",                 
+                                              "1.0TB HDD",                     "512GB SSD +  1.0TB Hybrid",    
+                                              "256GB SSD +  1.0TB Hybrid"),
+                      labels=c("128GB SSD" ,  "128GB Flash Storage" ,         
+                               "256GB SSD" ,                    "512GB SSD",                    
+                               "500GB HDD",                     "256GB Flash Storage" ,         
+                               "1000GB HDD",                       "32GB Flash Storage"  ,         
+                               "1128GB SSD&HDD",          "512GB SSD  SSD",           "64GB Flash Storage",            "1256GB SSD&HDD",         
+                               "2256GB SSD HDD" ,         "32GB SSD",                     
+                               "2000GB HDD",                       "64GB SSD",                     
+                               "1000GB Hybrid",                  "1512GB SSD&HDD",         
+                               "1000GB SSD" ,                      "756GB SSD&HDD",       
+                               "2128GB SSD&HDD",          "1024GB SSD",       
+                               "16GB SSD",                      "16GB Flash Storage",           
+                               "768GB SSD" ,       "2512GB SSD&HDD",         
+                               "164GB Flash Storage HDD", "180GB SSD",                    
+                               "2000GB HDD" ,           "32GB HDD",                     
+                               "2000GB SSD&HDD" ,           "512GB Flash Storage",          
+                               "128GB HDD",                     "240GB SSD",                    
+                               "8GB SSD",                       "508GB Hybrid",                 
+                               "1000GB HDD",                     "1512GB SSD&Hybrid",    
+                               "1256GB SSD&Hybrid"))
+
+#find the memory type and set it as an attribute
+dataset$MemoryType <- gsub(".*GB", "", dataset$Memory)
+
+#find the memory size and set it as an attribute
+dataset$MemorySize <- gsub("GB.*", "", dataset$Memory)
+
+#convert memory size to numeric 
+dataset$MemorySize<- as.numeric(as.character(dataset$MemorySize))
+
+# remove Memory attribute to reduce redundency
+dataset$Memory<-NULL
+```
+
+### 5: statistical simmaries
+
+##### This function provides insights into the central tendency of the data through measures like mean and median. offering a sense of the data's central location.you can notice the mean of the Price_euros is 1124,for the Inches it is 15.02,for the Weight its 2.039 ,the median for the Price_euros is 977.0 ,the median for the weight is 2.040 ,the median for the Inches is 15.6 The summary includes information about the spread of the data, providing the minimum and maximum values. This gives a sense of the range within which the data is distributed,for the Price_euros the range is between 174 and 6099 ,for the Weight it is between 0.690 and 4.700,for the Inches it is between 10.1 and 18.4. d
+
+```{r}
+summary(dataset)
+```
+##### The mean is a central tendency metric that is frequently used to describe the average value of a data set.we can see that mean of Price_euros column is the highest(1123.687) whereras mean of Weight column (2.038734) is the lowest.
+
+```{r}
+#Mean 
+mean(dataset$Price_euros) 
+
+mean(dataset$Inches)
+
+mean(dataset$Weight)
+```
+##### The median is a measure of central tendency that represents the data set's middle value. It is not as influenced by extreme values like the mean.we can see that center of the of the Price_euros column is(977) which is the largest median ,and the center for the Weight column is(2.04) which is the smallest median.
+
+```{r}
+# Find median of all data
+median(dataset$Price_euros)
+
+median(dataset$Company)
+median(dataset$Product)
+median(dataset$TypeName)
+median(dataset$Inches)
+
+median(dataset$ScreenResolution)
+median(dataset$CPU) 
+median(dataset$Weight)
+
+median(dataset$OpSys)
+median(dataset$Ram)
+
+median(dataset$GPU)
+median(dataset$MemorySize)
+
+median(dataset$MemoryType)
+```
+##### The mode is the most often occurring value in for a certain column. It indicates the most common occurrence for a certain attribute.All of the columns in our data collection have the one mode, indicating that it is unimodal.
+
+```{r}
+data_table <- table(dataset$Price_euros)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$CPU)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$Company)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$Product)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$TypeName)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$Inches)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$ScreenResolution)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$CPU)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$GPU)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$Weight)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$MemorySize)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$MemoryType)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+```
+
+##### the range refers to the difference between the maximum and minimum values in a data set.we can see that the highest range is for the Price_euros column(174 to 6099),the lowest range is for the Weight column (0.69 to 4.70).
+
+### Range of data.
+
+```{r}
+range(dataset$Price_euros)
+
+range(dataset$Weight)
+
+range(dataset$Inches)
+```
+##### Calculating the variance for numeric data
+
+##### we can see that the highest variance is for the Price_euros column (488613.6),a high variance suggests that individual data points are far from the mean, and this can indicate that the data is highly spread out.the lowest variance is the Weight column(0.4428564) a low variance indicates that the data points are close to the mean and that the data is not spread out.
+
+```{r}
+var(dataset$Price_euros)
+
+var(dataset$Weight)
+
+var(dataset$Inches)
+```
+##### relationship between price of laptop and company,we have observed that businesses like Lenovo, HP, Dell, Asus, Acer,Vero ,toshiba ,chuwi,Mediacom offer low prices .
+
+```{r}
+ggplot(dataset,aes(Price_euros,Company))+geom_point()
+
+```
+
+##### From the bellow graph, the Netbook type is the most affordable type. Notebook, and 2-1 Convertible laptops are more affordable options than Gaming, and Ultrabook types. The most expensive type in our dataset is workstation type.
+
+```{r}
+ggplot(dataset,aes(Price_euros,TypeName))+geom_point()
+
+```
+##### relationship between price of laptop and Ram,I've discovered that RAM less than 20 GB is less expensive,and We can see from the graph that the most frequent Ram sizes are 8GB and 4GB. We can also notice that the larger the RAM size is, the higher its price.
+
+```{r}
+ggplot(dataset,aes(Price_euros,Ram))+geom_point()
+```
+
+### 6: Graphs
+
+#### Company Bar chart and Histogram
+
+##### Top 5 frequent companies in out dataset are Dell, Lenovo, HP, Asus, Acer. For Dell, Lenovo, HP, and Asus, we can notice from the bar chart that thier price is moderately expensive. For Acer, it is ideal price.
+
+```{r}
+#Company histogram
+companyHist <- table(dataset$Company)
+companyHist <- companyHist[order(-companyHist)]
+barplot(companyHist, main = "Frequency of Company", 
+        ylab = "Frequency",
+        las = 2,cex.names = 0.8)
+
+#Company Bar chart
+dataset %>%
+  group_by(Company) %>%
+  summarize(Average_Price = mean(Price_euros, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(Company, Average_Price), y = Average_Price)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Average Laptop Prices by Company", x = "Company", y = "Average Price for each company") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45,hjust=1))
+
+```
+#### Laptops types bar chart and Histogram
+
+##### Top bought laptop type is Notebook and has Ideal price.
+
+##### From the bar chart we see that Workststion laptops are Very Expensive, while Gaming and Ultrabook lapotps are Expensive but it is consider normal to have high prices due to the features it has. 
+
+```{r}
+
+#---
+typeHist <- table(dataset$TypeName)
+typeHist <- typeHist[order(-typeHist)]
+barplot(typeHist, main = "Frequency of Type", 
+        ylab = "Frequency",
+        las = 2,cex.names = 0.6)
+
+
+# typeName
+dataset %>%
+  group_by(TypeName) %>%
+  summarize(Average_Price = mean(Price_euros, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(TypeName, Average_Price), y = Average_Price)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Average Laptop Prices by TypeName", x = "TypeName", y = "Average Price for each Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+```
+#### Memory Sizes Histogram
+
+##### Top 3 types of Memory Sizes are: 256GB, 1000GB, 500GB.
+
+```{r}
+#---
+memorySizeHist <- table(dataset$MemorySize)
+memorySizeHist <- memorySizeHist[order(-memorySizeHist)]
+barplot(memorySizeHist, 
+        main = "Frequency of Memory Size",
+        ylab = "Frequency",
+        las = 2, cex.names=0.6) 
+```
+
+#### Memory Type bar chart and Histogram
+##### Top 3 types of Memory Types are: SSD, HDD, SSD&HDD, and from the bar chart we can notice that most CPUs in our dataset fall in the lower price range.
+```{r}
+
+#-------------------
+memoryTypeHist <- table(dataset$MemoryType)
+memoryTypeHist <- memoryTypeHist[order(-memoryTypeHist)]
+barplot(memoryTypeHist, main = "Frequency of Memory Type",
+        ylab = "Frequency",
+        las = 2, cex.names = 0.6)
+#------------------
+
+dataset %>%
+  group_by(MemoryType) %>%
+  summarize(Average_Price = mean(Price_euros, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(MemoryType, Average_Price), y = Average_Price)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Average Laptop Prices by Memory Type", x = "Memory Type", y = "Average Price for each Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+### 7: Feature Selection
+
+##### we used chi square for the nominal attributes and we choose the classes[CPU,Resulotion,MemoryType]
+
+##### according to chi square we figure that there is a high positive relationship between the class lable[price] and CPU which can be a result of CPU's powerful impact, therfore CPU's with higher performance and advanced technology tend to be more expensive. and there is a high positive relationship between the class lable[price] and Resulotion since laptops with higher resolutions have a detailed display which can enhance the visual experience and this tend to make the price higher due to the cost of manufacturing and the improved viewing experience they offer.
+
+##### And lastly we can see that there is a high positive relationship between the class lable[price] and Memory and that's because a higher memory allows for better multitasking, faster performance, and more storage space for files and applications which have a huge impact on the price of a laptop.
+
+##### for the other attributes which are OpySys, Type Name, and company all of them have an effect on the price but not as important as the prevoius attributes.
+
+```{r}
+# Feature selection
+result=chisq.test(dataset$Price_euros , dataset$Company)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$Product)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$TypeName)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$ScreenResolution)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$CPU)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$MemoryType)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$OpSys)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$GPU)
+print(result)
+```
+##### we used the correlation for the numeric attributes and we have Ram,Weight,Inches,MemorySize.
+
+##### Ram has a huge impact on the price since it provides smoother multitasking so laptops with larger ram have a higher price.
+
+##### for the Weight and Inches it has an effect on the price but not as much as the Ram , since Weight and Inches have a less correlation with the class lable[price] than Ram and because they don't offer a new or enhanced features but generally smaller and lighter are more portable and convenient which can make them more expensive, on the other hand heavier laptops may have more room for additional components and features such as a bigger Ram and more memory space which can also increase the price since the Ram and memorySize correlated positively.So, the Weight and Inches might play a role in determining the price of a laptop.these selected attributes will hepl us in building the classification model.
+
+##### Taking into consideration that we don't have any redundant variables in addition to the importance of the all attributes and how all of them contribute to the class label, we didn't need to apply any feature selection.
+
+```{r}
+result2=cor(dataset$Price_euros ,dataset$Inches)
+print(result2)
+result2=cor(dataset$Price_euros ,dataset$Ram)
+print(result2)
+result2=cor(dataset$Price_euros ,dataset$Weight)
+print(result2)
+result2=cor(dataset$Price_euros ,dataset$MemorySize)
+print(result2)
+
+```
+### 8: Labling the class label (Price_euros)
+
+##### as shown in the bar plot the bar of [500-1000]had the most data in it, even about double the data in [1500-2000]bar, now there are two factors to keep in mind when distributing the class labels:
+
+#### 1. the width and the frequency of data in the class -as it affects the balance of data-
+
+#### 2. the logical distribution of prices, as -price range- is a previously known to human and -made by the human understanding- concept, the logic of the class distribution relies on being true to the concept of price ranges.
+
+```{r}
+## first draw a histogram to the study the distribution of data
+hist(dataset$Price_euros)
+```
+##### first we take a look at the semi-standard of price labeling: inexpensive, moderately expensive, expensive, very expensive. we would add a fifth attribute "ideal price" as we believe that the bar [500-1000] brings the existence of good feature+good price.
+
+##### now we devive the prices into 5 attributes of fixed width, [0-500] inexpensive, [500-1000]ideal price where most buyers are located, [1000-1500] moderately expensive, [1500-2000] expensive, [2000 and above] very expensive where least buyers are located.
+
+```{r}
+dataset$price=cut (dataset$Price_euros, breaks=c(0,500, 1000, 1500, 2000,7000), labels=c("inexpensive","ideal price","moderetly expensive","expinsive","very expensive"))
+```
+
+### dataset after simplification, encoding and labling
+
+```{r}
+head(dataset, 5)
+```
+### checking the balance of the dataset class label
+
+##### looking at the bar plot, about 20% of data is inexpensive and about 35% of it is an ideal price,
+
+##### which means about half of the data lies under moderately expensive and above,
+
+##### and looking at {ideal price} and {very expensive} there is a big difference observed in the amount of data available. If we are making a model based on both the dataset accuracy predicting ideal price will be higher compared to very expensive.
+
+```{r}
+barplot(prop.table(table(dataset$price)),
+        col = rainbow(5),
+        ylim = c(0, 0.7),
+        main = "Class Distribution")
+
+```
+### 9: deleting multivalue attribures 
+
+##### removing the product and ID attributes , since Product has 600 and ID has 1303 unique values , both are a  multivalued attribute so it has to be removed from the dataset because the information gain and gini index are biased towards unique and multivalued attributes and this will mislead the classification.
+
+```{r}
+#delete laptop_ID attribute
+dataset <- dataset[, -which(names(dataset) == "laptop_ID")]
+dataset <- dataset[, -which(names(dataset) == "Product")]
+
+```
+
+##### saving all the changes in the original dataset to a new dataset "new_dataset" to make it easier to handle the classification and clustering steps. 
+```{r}
+write.csv(dataset , file="new_dataset.csv" ,row.names = FALSE)
+```
+
+
+#### to handle imbalanced data when predicting : the classification and clustering methods will be implemented.
