@@ -1,0 +1,2046 @@
+---
+title: "PHASE 2&3"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+ml_document:
+  html_notebook: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+# DATA MINING PHASE 3
+
+## Main Goal :
+
+### nowdays laptops are important because they offer portability, convenience, and functionality. since they allow us to work, study, connect with other people it become an essential tools for us to do our work and study, and the most important factor to choose a laptop is the price so our role in this project is predict prices from different companies depending on several feature such as type name, CPU, GPU, screen resolution and more. we chose this dataset because we think it will help us build a classification and clustering model that will help others choose the appropriate laptop that satisfies their prefrences and budget.
+
+## Dataset source :
+
+### <https://www.kaggle.com/datasets/muhammetvarl/laptop-price>
+
+## Number of objects :
+
+### 1303
+
+## Number of attribute :
+
+### 13
+
+## dataset summary :
+
+##### The dataset includes :
+
+##### 1- Laptop ID : Numeric - a unique number identifies laptops - has values from 1 to 1303.
+
+##### 2- Company : String - laptop manufacture - include companies like dell, HP, lenovo, and asos ... etc.
+
+##### 3- Product : String - brand and model for each company.
+
+##### 4- TypeName : String - type of the laptop ( notebook,ultrabook,gaming...etc).
+
+##### 5- Inches : Numeric - screen size - ranges between 10.1 to 18.4
+
+##### 6- ScreenResulotion : Numeric - screen resulotion - ranges between 1366x768 and 3840x2160.
+
+##### 7- CPU : String - central processing unit - Intel core i3, intel core i5, intel i5 and more.
+
+##### 8- Ram : numeric - laptop ram - 8GB, 16GB, 4GB, 2GB, 12GB, 6GB, 32GB, 24GB, and 64GB.
+
+##### 9- Memory : String - hard disk / SSD memory - HDD, SSD, flash storage and hybrid.
+
+##### 10- Gpu : String - graphics processing unit - AMD, Nvidia, and Intel.
+
+##### 11- OpSys : String - operating system -macOS, No OS, Windows 10, Mac OS X, Linux, Android, Windows 10 S, Chrome OS, and Windows.
+
+##### 12- Weight : numeric - laptop weight - ranges between 0.81Kg to 4.7Kg.
+
+##### 13- Price_euros : Numeric - price in euro - ranges between 174 to 6099 euros.
+
+## class lables :
+
+##### inexpensive
+
+##### ideal price
+
+##### moderetly expensive
+
+##### expinsive
+
+##### very expensive
+
+##### importing needed packages
+
+```{r}
+library(stringr)
+library(tidyr)
+library(data.table)
+
+library(dplyr)
+library(outliers)
+library(ggplot2)
+library(plotly)
+library(tidyverse)
+
+install.packages("factoextra", repos = "https://cran.r-project.org")
+library(factoextra)
+
+library(cluster)
+install.packages("cluster", repos = "https://cran.r-project.org")
+
+
+library(NbClust)
+install.packages("NbClust", repos = "https://cran.r-project.org")
+```
+
+#### dataset importing
+
+```{r}
+library(readr)
+dataset <- read.csv("./dataset.csv")
+View(dataset)
+```
+
+### Raw data set
+
+```{r}
+# Display the first 10 rows
+head(dataset, 10)
+
+# Display the last 10 rows
+tail(dataset, 10)
+```
+
+### 1: Missing values and duplicated rows
+
+##### There are no missing values in our dataset and Nor duplicated rows
+
+```{r}
+#check for missing values
+sum(is.na(dataset))
+
+
+cat("Number of duplicate rows: ")
+sum(duplicated(dataset))
+```
+
+### 2: converting to numeric
+
+##### We convert Weight attribute from char to numeric by removing the "kg" suffix to apply any needed mathematical operations.
+
+```{r}
+#Find unique values in Weight
+unique(dataset$Weight)
+#sub the kg from Weight attribute
+dataset$Weight <- gsub("kg", "", dataset$Weight)
+#convert Weight to numeric
+dataset$Weight<- as.numeric(as.character(dataset$Weight))
+
+#Find unique values in Ram
+unique(dataset$Ram)
+#Encode the Ram attribute
+dataset$Ram=factor(dataset$Ram,levels=c("8GB","16GB","4GB","2GB","12GB","6GB","32GB","24GB","64GB"),labels=c("8","16","4","2","12","6","32","24","64"))
+dataset$Ram<- as.numeric(as.character(dataset$Ram))
+
+#dataset$OpSys<- as.numeric(as.character(dataset$OpSys))
+```
+
+##### correcting the type mismatch of Screen resolution to numeric
+
+##### find the Screen resolution product (first and second factors cut from the other nominal explenation)
+
+```{r}
+dataset$ScreenResolutionupdate <- gsub(".* ", "", dataset$ScreenResolution)
+
+
+#find the Screen resulotion product (first factor)
+dataset$ScreenResolutionFactor1 <- gsub(".*x", "", dataset$ScreenResolutionupdate)
+
+#find the Screen resolution product (second factor)
+dataset$ScreenResolutionfactor2 <- gsub("x.*", "", dataset$ScreenResolutionupdate)
+
+#enforce numeric type to both attribtes to apply mathematical operations
+dataset$ScreenResolutionFactor1<- as.numeric(as.character(dataset$ScreenResolutionFactor1))
+dataset$ScreenResolutionfactor2<- as.numeric(as.character(dataset$ScreenResolutionfactor2))
+
+#apply the mathematical operation to the ScreenResolution attribute
+dataset$ScreenResolution <- dataset$ScreenResolutionFactor1*dataset$ScreenResolutionfactor2 
+
+#delete added attribute as the trigger redunduncy
+dataset$ScreenResolutionFactor1<-NULL
+dataset$ScreenResolutionfactor2 <-NULL
+dataset$ScreenResolutionupdate<-NULL
+
+```
+
+### 3: Detecting outliers
+
+##### We got 29 row as box plot outliers for Price_euros. All detected outliers were above the maximume value for price. After analyzing them we saw that the highest price was the laptop with id 200, which was 6099 €, we checked its specifications, and noticed that it was gaming device with touchscreen, 4k screen resolution, i7 CPU, 32 GB Ram, and 1TB SSD memory. After analyzing all the rows, we concluded that each laptop price and its specifications were reasonable, and there is no reason to delete them as outliers.
+
+```{r}
+#Price_euros
+bp_price <- boxplot(dataset$Price_euros,
+        ylab = "Price_euros",
+        main = "Price_euros" )
+
+outliers <- bp_price$out
+price_Outliers <- dataset[dataset$Price_euros %in% outliers, c(1:12)]
+
+# Display the first 10 rows
+head(price_Outliers, 5)
+
+#Maximume outlier Price_euros
+cat("The Maximum Outlier in Price_euros: ")
+max(price_Outliers$Price_euros)
+
+cat("Maximum value for price: ")
+bp_price$stats[5]
+
+
+
+```
+
+##### We analyzed the 46 Weight outliers. All detected outliers were above the maximume value. We noticed that most laptops are of type gaming and of 17 inches. The maximume weight is 4.7 kg, and after checking all the rows and analyzing the scatter plot between inches and weight, we concluded that there is no reason to delete them as outliers since high weight for gaming laptops with large screens (inches) is normal.
+
+```{r}
+plot(dataset$Inches, dataset$Weight, xlab="Inches", ylab="Weight")
+```
+
+```{r}
+#Weight
+bp_weight <- boxplot(dataset$Weight,
+        ylab = "weight",
+        main = "weight" )
+
+outliers <- bp_weight$out
+weight_Outliers <- dataset[dataset$Weight %in% outliers, c(1:12)]
+
+# Display the first 10 rows
+head(weight_Outliers, 5)
+
+#Maximum outlier weight
+cat("The Maximum Outlier in weight: ")
+max(weight_Outliers$Weight)
+
+cat("Maximum value for weight: ")
+bp_weight$stats[5]
+
+```
+
+##### The outliers detected from the boxplot was 1 above the maximume value, and 38 outlier under the minumum value. The laptop above the maximum value was 18.4 inches gaming laptop and 4.4 kg. For the minumum values, they were all from type (2 in 1 Convertible),(Ultrabook), and (Netbook) which they are popular for their light weight and small sizes. From the the previous scatter plot with the positive correlation between inches and weight, We decided that the detected outlier will not be removed since they are not really outliers.
+
+```{r}
+#Inches
+bp_Inches <- boxplot(dataset$Inches,
+        ylab = "Inches",
+        main = "Inches" )
+
+outliers <- bp_Inches$out
+Inches_Outliers <- dataset[dataset$Inches %in% outliers, c(1:12)]
+
+# Display the first 10 rows
+head(Inches_Outliers, 5)
+
+#Maximum outlier Inches
+cat("The Maximum Outlier in Inches: ")
+max(Inches_Outliers$Inches)
+
+cat("Maximum value for Inches: ")
+bp_Inches$stats[5]
+
+cat("Minumum value for Inches: ")
+bp_Inches$stats[1]
+
+```
+
+### 4: Data simplification and adding attributes
+
+### Data simplification
+
+#### Data simplification on CPU and GPU
+
+##### CPU and GPU attributes are nominal, CPU has 118 unique value, and GPU has 110 unique value. We could not use them until we categorized CPU into 10 categories, and GPU into 7. We used the the brand and generation to categorize them. This step enabled us to generate usefull graphs out of these attributes.
+
+```{r}
+cat("unique values in CPU: ")
+length(unique(dataset$Cpu))
+cat("unique values in GPU: ")
+length(unique(dataset$Gpu))
+
+```
+
+```{r}
+# simplifying CPU types
+pattern_categories <- data.frame(
+              Cpu = c("Intel Core i3 .*","Intel Core i5 .*", "Intel Core i7 .*", "Intel Core i9 .*",
+                          "Intel Core M.*", "(?i)Intel Atom x.*",
+                          "Intel Celeron .*","Intel Pentium .*",
+                          "AMD A.*", "AMD E.*"),
+                Category = c("Intel Core i3", "Intel Core i5", "Intel Core i7","Intel Core i9",
+                             "Intel Core M", "Intel Atom x",
+                             "Intel Celeron", "Intel Pentium", 
+                             "AMD A-Series", "AMD E-Series")
+  )
+# assigning categories based on patterns
+assign_category <- function(Cpu) {
+  for (i in 1:nrow(pattern_categories)) {
+    if (grepl(pattern_categories$Cpu[i], Cpu)) {
+      return(pattern_categories$Category[i])
+    }
+  }
+  return("Other")  # if no patterns match, it assigns it to "Other"
+}
+
+# Create a new column with CPU categories
+dataset$CPU <- sapply(dataset$Cpu, assign_category)
+dataset$Cpu<-NULL
+
+```
+
+```{r}
+# simplifying GPU types
+gpu_pattern_categories <- data.frame(
+  Gpu = c("Intel Iris.*", "Intel HD Graphics.*", "AMD Radeon.*", "Nvidia GeForce.*", "Intel UHD Graphics.*", "Nvidia Quadro .*"),
+  Category = c("Intel Iris Graphics", "Intel HD Graphics", "AMD Radeon Graphics", "Nvidia GeForce Graphics", "Intel UHD Graphics", "Nvidia Quadro")
+)
+
+# Function to assign GPU categories based on patterns
+assign_gpu_category <- function(gpu_name) {
+  for (i in 1:nrow(gpu_pattern_categories)) {
+    if (grepl(gpu_pattern_categories$Gpu[i], gpu_name)) {
+      return(gpu_pattern_categories$Category[i])
+    }
+  }
+  return("Other")  # Assign to "Other" category if no patterns match
+}
+
+
+# Create a new column "Gpu_Category"
+dataset$GPU <- sapply(dataset$Gpu, assign_gpu_category)
+dataset$Gpu<-NULL
+
+```
+
+#### Jitter plot for CPU and GPU
+
+##### Most frequent CPU types are "Intel Core i7" and "Intel Core i5". "Intel Core i3", "AMD A-series", and "Intel Celeron" can be labeled as Ideal price.
+
+```{r}
+# Plot CPU
+ggplot(dataset, aes(x = CPU, y = Price_euros)) +
+  geom_jitter(width = 0.2, height = 0) +
+  labs(title = "Jitter Plot of Laptop Prices by CPU Type", x = "CPU Type", y = "Price (in Euros)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+##### Most frequent GPU types are "Intel HD Graphics" and "Nvidia GeForce Graphics". "AMD Radeon Graphics" can be labeled as moderately expensive.
+
+```{r}
+#plot GPU
+ggplot(dataset, aes(x = GPU, y = Price_euros)) +
+  geom_jitter(width = 0.2, height = 0) +
+  labs(title = "Jitter Plot of Laptop Prices by GPU Category", x = "GPU Category", y = "Price (in Euros)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45,hjust=1))
+
+```
+
+#### Data simplification on Memory
+
+##### Since Memory attribute had more than one information, we split the Memory attribute into: Memory type, and memory size -where sizes unit is in GB- to show the effect of each information.
+
+##### We can notice that "Flash Storage", "HDD", and "Hybrid" is in the cheaper range. "SSD has a large price range so it can be categorized as"Low", "Average" or "High".For "SSD&HDD" we see that its price range is large, it can be categorized as "Average" or "High".
+
+##### Memory sizes that are (16,32,64)GB can be categorized as "Low". For (500,1000)GB it can be described as "Low" or "Average". For (256,1024,1128)GB it can be categorized as "Average" or "High". For (512,1256)GB it can be categorized as "High".
+
+```{r}
+# categorizing Memory types
+dataset$Memory=factor(dataset$Memory,levels=c("128GB SSD" ,  "128GB Flash Storage" ,         
+                                              "256GB SSD" ,                    "512GB SSD",                    
+                                              "500GB HDD",                     "256GB Flash Storage" ,         
+                                              "1TB HDD",                       "32GB Flash Storage"  ,         
+                                              "128GB SSD +  1TB HDD",          "256GB SSD +  256GB SSD",       
+                                              "64GB Flash Storage",            "256GB SSD +  1TB HDD",         
+                                              "256GB SSD +  2TB HDD" ,         "32GB SSD",                     
+                                              "2TB HDD",                       "64GB SSD",                     
+                                              "1.0TB Hybrid",                  "512GB SSD +  1TB HDD",         
+                                              "1TB SSD" ,                      "256GB SSD +  500GB HDD",       
+                                              "128GB SSD +  2TB HDD",          "512GB SSD +  512GB SSD",       
+                                              "16GB SSD",                      "16GB Flash Storage",           
+                                              "512GB SSD +  256GB SSD" ,       "512GB SSD +  2TB HDD",         
+                                              "64GB Flash Storage +  1TB HDD", "180GB SSD",                    
+                                              "1TB HDD +  1TB HDD" ,           "32GB HDD",                     
+                                              "1TB SSD +  1TB HDD" ,           "512GB Flash Storage",          
+                                              "128GB HDD",                     "240GB SSD",                    
+                                              "8GB SSD",                       "508GB Hybrid",                 
+                                              "1.0TB HDD",                     "512GB SSD +  1.0TB Hybrid",    
+                                              "256GB SSD +  1.0TB Hybrid"),
+                      labels=c("128GB SSD" ,  "128GB Flash Storage" ,         
+                               "256GB SSD" ,                    "512GB SSD",                    
+                               "500GB HDD",                     "256GB Flash Storage" ,         
+                               "1000GB HDD",                       "32GB Flash Storage"  ,         
+                               "1128GB SSD&HDD",          "512GB SSD  SSD",           "64GB Flash Storage",            "1256GB SSD&HDD",         
+                               "2256GB SSD HDD" ,         "32GB SSD",                     
+                               "2000GB HDD",                       "64GB SSD",                     
+                               "1000GB Hybrid",                  "1512GB SSD&HDD",         
+                               "1000GB SSD" ,                      "756GB SSD&HDD",       
+                               "2128GB SSD&HDD",          "1024GB SSD",       
+                               "16GB SSD",                      "16GB Flash Storage",           
+                               "768GB SSD" ,       "2512GB SSD&HDD",         
+                               "164GB Flash Storage HDD", "180GB SSD",                    
+                               "2000GB HDD" ,           "32GB HDD",                     
+                               "2000GB SSD&HDD" ,           "512GB Flash Storage",          
+                               "128GB HDD",                     "240GB SSD",                    
+                               "8GB SSD",                       "508GB Hybrid",                 
+                               "1000GB HDD",                     "1512GB SSD&Hybrid",    
+                               "1256GB SSD&Hybrid"))
+
+#find the memory type and set it as an attribute
+dataset$MemoryType <- gsub(".*GB", "", dataset$Memory)
+
+#find the memory size and set it as an attribute
+dataset$MemorySize <- gsub("GB.*", "", dataset$Memory)
+
+#convert memory size to numeric 
+dataset$MemorySize<- as.numeric(as.character(dataset$MemorySize))
+
+# remove Memory attribute to reduce redundency
+dataset$Memory<-NULL
+```
+
+### 5: statistical simmaries
+
+##### This function provides insights into the central tendency of the data through measures like mean and median. offering a sense of the data's central location.you can notice the mean of the Price_euros is 1124,for the Inches it is 15.02,for the Weight its 2.039 ,the median for the Price_euros is 977.0 ,the median for the weight is 2.040 ,the median for the Inches is 15.6 The summary includes information about the spread of the data, providing the minimum and maximum values. This gives a sense of the range within which the data is distributed,for the Price_euros the range is between 174 and 6099 ,for the Weight it is between 0.690 and 4.700,for the Inches it is between 10.1 and 18.4. d
+
+```{r}
+summary(dataset)
+```
+
+##### The mean is a central tendency metric that is frequently used to describe the average value of a data set.we can see that mean of Price_euros column is the highest(1123.687) whereras mean of Weight column (2.038734) is the lowest.
+
+```{r}
+#Mean 
+mean(dataset$Price_euros) 
+
+mean(dataset$Inches)
+
+mean(dataset$Weight)
+```
+
+##### The median is a measure of central tendency that represents the data set's middle value. It is not as influenced by extreme values like the mean.we can see that center of the of the Price_euros column is(977) which is the largest median ,and the center for the Weight column is(2.04) which is the smallest median.
+
+```{r}
+# Find median of all data
+median(dataset$Price_euros)
+
+median(dataset$Company)
+median(dataset$Product)
+median(dataset$TypeName)
+median(dataset$Inches)
+
+median(dataset$ScreenResolution)
+median(dataset$CPU) 
+median(dataset$Weight)
+
+median(dataset$OpSys)
+median(dataset$Ram)
+
+median(dataset$GPU)
+median(dataset$MemorySize)
+
+median(dataset$MemoryType)
+```
+
+##### The mode is the most often occurring value in for a certain column. It indicates the most common occurrence for a certain attribute.All of the columns in our data collection have the one mode, indicating that it is unimodal.
+
+```{r}
+data_table <- table(dataset$Price_euros)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$CPU)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$Company)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$Product)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$TypeName)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$Inches)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$ScreenResolution)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$CPU)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$GPU)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$Weight)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$MemorySize)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+data_table <- table(dataset$MemoryType)
+mode_result <- names(data_table[which.max(data_table)])
+print(mode_result)
+
+```
+
+##### the range refers to the difference between the maximum and minimum values in a data set.we can see that the highest range is for the Price_euros column(174 to 6099),the lowest range is for the Weight column (0.69 to 4.70).
+
+### Range of data.
+
+```{r}
+range(dataset$Price_euros)
+
+range(dataset$Weight)
+
+range(dataset$Inches)
+```
+
+##### Calculating the variance for numeric data
+
+##### we can see that the highest variance is for the Price_euros column (488613.6),a high variance suggests that individual data points are far from the mean, and this can indicate that the data is highly spread out.the lowest variance is the Weight column(0.4428564) a low variance indicates that the data points are close to the mean and that the data is not spread out.
+
+```{r}
+var(dataset$Price_euros)
+
+var(dataset$Weight)
+
+var(dataset$Inches)
+```
+
+##### relationship between price of laptop and company,we have observed that businesses like Lenovo, HP, Dell, Asus, Acer,Vero ,toshiba ,chuwi,Mediacom offer low prices .
+
+```{r}
+ggplot(dataset,aes(Price_euros,Company))+geom_point()
+
+```
+
+##### From the bellow graph, the Netbook type is the most affordable type. Notebook, and 2-1 Convertible laptops are more affordable options than Gaming, and Ultrabook types. The most expensive type in our dataset is workstation type.
+
+```{r}
+ggplot(dataset,aes(Price_euros,TypeName))+geom_point()
+
+```
+
+##### relationship between price of laptop and Ram,I've discovered that RAM less than 20 GB is less expensive,and We can see from the graph that the most frequent Ram sizes are 8GB and 4GB. We can also notice that the larger the RAM size is, the higher its price.
+
+```{r}
+ggplot(dataset,aes(Price_euros,Ram))+geom_point()
+```
+
+### 6: Graphs
+
+#### Company Bar chart and Histogram
+
+##### Top 5 frequent companies in out dataset are Dell, Lenovo, HP, Asus, Acer. For Dell, Lenovo, HP, and Asus, we can notice from the bar chart that thier price is moderately expensive. For Acer, it is ideal price.
+
+```{r}
+#Company histogram
+companyHist <- table(dataset$Company)
+companyHist <- companyHist[order(-companyHist)]
+barplot(companyHist, main = "Frequency of Company", 
+        ylab = "Frequency",
+        las = 2,cex.names = 0.8)
+
+#Company Bar chart
+dataset %>%
+  group_by(Company) %>%
+  summarize(Average_Price = mean(Price_euros, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(Company, Average_Price), y = Average_Price)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Average Laptop Prices by Company", x = "Company", y = "Average Price for each company") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45,hjust=1))
+
+```
+
+#### Laptops types bar chart and Histogram
+
+##### Top bought laptop type is Notebook and has Ideal price.
+
+##### From the bar chart we see that Workststion laptops are Very Expensive, while Gaming and Ultrabook lapotps are Expensive but it is consider normal to have high prices due to the features it has.
+
+```{r}
+
+#---
+typeHist <- table(dataset$TypeName)
+typeHist <- typeHist[order(-typeHist)]
+barplot(typeHist, main = "Frequency of Type", 
+        ylab = "Frequency",
+        las = 2,cex.names = 0.6)
+
+
+# typeName
+dataset %>%
+  group_by(TypeName) %>%
+  summarize(Average_Price = mean(Price_euros, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(TypeName, Average_Price), y = Average_Price)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Average Laptop Prices by TypeName", x = "TypeName", y = "Average Price for each Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+```
+
+#### Memory Sizes Histogram
+
+##### Top 3 types of Memory Sizes are: 256GB, 1000GB, 500GB.
+
+```{r}
+#---
+memorySizeHist <- table(dataset$MemorySize)
+memorySizeHist <- memorySizeHist[order(-memorySizeHist)]
+barplot(memorySizeHist, 
+        main = "Frequency of Memory Size",
+        ylab = "Frequency",
+        las = 2, cex.names=0.6) 
+```
+
+#### Memory Type bar chart and Histogram
+
+##### Top 3 types of Memory Types are: SSD, HDD, SSD&HDD, and from the bar chart we can notice that most CPUs in our dataset fall in the lower price range.
+
+```{r}
+
+#-------------------
+memoryTypeHist <- table(dataset$MemoryType)
+memoryTypeHist <- memoryTypeHist[order(-memoryTypeHist)]
+barplot(memoryTypeHist, main = "Frequency of Memory Type",
+        ylab = "Frequency",
+        las = 2, cex.names = 0.6)
+#------------------
+
+dataset %>%
+  group_by(MemoryType) %>%
+  summarize(Average_Price = mean(Price_euros, na.rm = TRUE)) %>%
+  ggplot(aes(x = reorder(MemoryType, Average_Price), y = Average_Price)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Average Laptop Prices by Memory Type", x = "Memory Type", y = "Average Price for each Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+### 7: Feature Selection
+
+##### we used chi square for the nominal attributes and we choose the classes[CPU,Resulotion,MemoryType]
+
+##### according to chi square we figure that there is a high positive relationship between the class lable[price] and CPU which can be a result of CPU's powerful impact, therfore CPU's with higher performance and advanced technology tend to be more expensive. and there is a high positive relationship between the class lable[price] and Resulotion since laptops with higher resolutions have a detailed display which can enhance the visual experience and this tend to make the price higher due to the cost of manufacturing and the improved viewing experience they offer.
+
+##### And lastly we can see that there is a high positive relationship between the class lable[price] and Memory and that's because a higher memory allows for better multitasking, faster performance, and more storage space for files and applications which have a huge impact on the price of a laptop.
+
+##### for the other attributes which are OpySys, Type Name, and company all of them have an effect on the price but not as important as the prevoius attributes.
+
+```{r}
+# Feature selection
+result=chisq.test(dataset$Price_euros , dataset$Company)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$Product)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$TypeName)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$ScreenResolution)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$CPU)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$MemoryType)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$OpSys)
+print(result)
+result=chisq.test(dataset$Price_euros , dataset$GPU)
+print(result)
+```
+
+##### we used the correlation for the numeric attributes and we have Ram,Weight,Inches,MemorySize.
+
+##### Ram has a huge impact on the price since it provides smoother multitasking so laptops with larger ram have a higher price.
+
+##### for the Weight and Inches it has an effect on the price but not as much as the Ram , since Weight and Inches have a less correlation with the class lable[price] than Ram and because they don't offer a new or enhanced features but generally smaller and lighter are more portable and convenient which can make them more expensive, on the other hand heavier laptops may have more room for additional components and features such as a bigger Ram and more memory space which can also increase the price since the Ram and memorySize correlated positively.So, the Weight and Inches might play a role in determining the price of a laptop.these selected attributes will hepl us in building the classification model.
+
+##### Taking into consideration that we don't have any redundant variables in addition to the importance of the all attributes and how all of them contribute to the class label, we didn't need to apply any feature selection.
+
+```{r}
+result2=cor(dataset$Price_euros ,dataset$Inches)
+print(result2)
+result2=cor(dataset$Price_euros ,dataset$Ram)
+print(result2)
+result2=cor(dataset$Price_euros ,dataset$Weight)
+print(result2)
+result2=cor(dataset$Price_euros ,dataset$MemorySize)
+print(result2)
+
+```
+
+### 8: Labling the class label (Price_euros)
+
+##### as shown in the bar plot the bar of [500-1000]had the most data in it, even about double the data in [1500-2000]bar, now there are two factors to keep in mind when distributing the class labels:
+
+#### 1. the width and the frequency of data in the class -as it affects the balance of data-
+
+#### 2. the logical distribution of prices, as -price range- is a previously known to human and -made by the human understanding- concept, the logic of the class distribution relies on being true to the concept of price ranges.
+
+```{r}
+## first draw a histogram to the study the distribution of data
+hist(dataset$Price_euros)
+```
+
+##### first we take a look at the semi-standard of price labeling: inexpensive, moderately expensive, expensive, very expensive. we would add a fifth attribute "ideal price" as we believe that the bar [500-1000] brings the existence of good feature+good price.
+
+##### now we devive the prices into 5 attributes of fixed width, [0-500] inexpensive, [500-1000]ideal price where most buyers are located, [1000-1500] moderately expensive, [1500-2000] expensive, [2000 and above] very expensive where least buyers are located.
+
+```{r}
+dataset$price=cut (dataset$Price_euros, breaks=c(0,500, 1000, 1500, 2000,7000), labels=c("inexpensive","ideal price","moderetly expensive","expinsive","very expensive"))
+```
+
+### dataset after simplification, encoding and labling
+
+```{r}
+head(dataset, 5)
+```
+
+### checking the balance of the dataset class label
+
+##### looking at the bar plot, about 20% of data is inexpensive and about 35% of it is an ideal price,
+
+##### which means about half of the data lies under moderately expensive and above,
+
+##### and looking at {ideal price} and {very expensive} there is a big difference observed in the amount of data available. If we are making a model based on both the dataset accuracy predicting ideal price will be higher compared to very expensive.
+
+```{r}
+barplot(prop.table(table(dataset$price)),
+        col = rainbow(5),
+        ylim = c(0, 0.7),
+        main = "Class Distribution")
+
+```
+
+### 9: deleting multivalue attribures
+
+##### removing the product and ID attributes , since Product has 600 and ID has 1303 unique values , both are a multivalued attribute so it has to be removed from the dataset because the information gain and gini index are biased towards unique and multivalued attributes and this will mislead the classification.
+
+```{r}
+#delete laptop_ID attribute
+dataset <- dataset[, -which(names(dataset) == "laptop_ID")]
+dataset <- dataset[, -which(names(dataset) == "Product")]
+
+```
+
+##### saving all the changes in the original dataset to a new dataset "new_dataset" to make it easier to handle the classification and clustering steps.
+
+```{r}
+write.csv(dataset , file="new_dataset.csv" ,row.names = FALSE)
+```
+
+#### to handle imbalanced data when predicting : the classification and clustering methods will be implemented.
+
+### 10: classification
+
+##### read the new dataset after preproccessing and cleaning
+
+```{r}
+library(readr)
+new_dataset <- read.csv("new_dataset.csv", header = TRUE , sep = ',' , stringsAsFactors = T)
+
+```
+
+##### importing needed packages
+
+```{r}
+install.packages('party', repos = "https://cran.r-project.org")
+library(party)
+install.packages('caret', repos = "https://cran.r-project.org")
+library(caret)
+install.packages("rpart", repos = "https://cran.r-project.org")
+library(rpart)
+install.packages("rpart.plot", repos = "https://cran.r-project.org")
+library(rpart.plot)
+```
+
+#### We split the dataset into training data, and testing data using random sampling. We splited our data 70-30%, 60-40%, and 80-20%.
+
+#### 70% training 30% testing
+
+##### first we set the seed and then split the dataset into 70% training 30% testing and lastly define the formula
+
+```{r}
+set.seed(1234)
+ind <- sample(2, nrow(new_dataset), replace=TRUE, prob=c(0.7, 0.3))
+trainData <- new_dataset[ind==1,]
+testData <- new_dataset[ind==2,]
+
+myFormula <- price ~ 	Company + TypeName + Inches + ScreenResolution + Ram + OpSys + Weight + CPU + GPU + MemoryType + MemorySize
+```
+
+#### Information gain
+
+##### we used ctree as decision tree function
+
+```{r}
+new_dataset_ctree <- ctree(myFormula, data=trainData)
+```
+
+##### 27 of expensive were classified correctly and 18 were classified as moderetly expensive , very expensive.
+
+##### 199 of ideal price were classified correctly, 24 were classified as inexpensive, 23 were classified as expensive and 2 as very expensive.
+
+##### 154 of inexpensive were classified correctly, 32 were classified as ideal price, 2 as moderetly expensive.
+
+##### 152 of moderetly expensive were classified correctly, 66 were classified as expensive, 94 were classified as ideal price and 18 as very expensive.
+
+##### 58 of very expensive were classified correctly, 16 were classified as expensive, 4 were classified as ideal price and 15 as moderetly expensive.
+
+##### as we can see the result is not accurate since our dataset is imbalanced.
+
+```{r}
+# check the prediction
+plot(new_dataset_ctree,type="simple") #unreadable tree
+table(predict(new_dataset_ctree), trainData$price)
+```
+
+##### 9 of expensive were classified correctly and 12 were classified as moderetly expensive and 11 as very expensive.
+
+##### 70 of ideal price were classified correctly, 12 were classified as inexpensive, 15 were classified as moderetly expensive and 1 as very expensive.
+
+##### 55 of inexpensive were classified correctly and 11 as ideal price.
+
+##### 73 of moderetly expensive were classified correctly, 33 were classified as expensive, 25 were classified as ideal price, 1 were classified as inexpensive and 10 as very expensive.
+
+##### 19 of very expensive were classified correctly, 16 were classified as expensive, 2 were classified as ideal price and 6 as moderetly expensive.
+
+##### we conclude from these results that information gain is not the most appropriate method to classify our dataset.
+
+```{r}
+# predict on test data
+testPred <- predict(new_dataset_ctree, newdata = testData)
+table(testPred, testData$price)
+```
+
+##### calculating the overall accuracy
+
+```{r}
+#Accuracy of model 
+results <- confusionMatrix(testPred, testData$price)
+acc <- results$overall["Accuracy"]*100
+acc
+
+
+results
+as.table(results)
+as.matrix(results)
+as.matrix(results, what = "overall")
+as.matrix(results, what = "classes")
+print(results)
+```
+
+##### in this model we split the data into 70% training which model learns from the relationships and patterns within this data.
+
+##### for the remaining 30% of the data is for evaluating the model based on the testing data and therefore generalize it to a new data examples.
+
+##### the accuracy of the 70%-30% information gain = 59.32% which we can consider not too high but appropriate for our dataset since it is umbalanced.
+
+##### the tree has many branches so it's difficult to understand it by only looking, however the model choosed the CPU as the splitting attribute since it has the highest infornation gain, and since the cpu has a huge impact on the price of a laptop we can consider it good root.
+
+##### we evaluate the model performance based on sensivity and specifity
+
+##### for expensive attribute the specifity (92.8%) were higher than sensivity (15.5%) which means that the model is better at classifying the negative classes but in the contrary for the postitve classes.
+
+##### the model classify the negative classes correctly for all the other attributes since the specifity is highr than the sensivity.
+
+##### overall, the decision tree we construct is not accurate since it didn't classify much laptops to expensive due to lack of expensive class in the training set.
+
+#### Gain ratio - C5.0
+
+```{r}
+install.packages("C50", repos = "https://cran.r-project.org")
+library(C50)
+
+set.seed(1958)
+
+tree_model <- C5.0(myFormula, data = trainData)
+#plot(tree_model)
+
+
+testPred <- predict(tree_model, newdata = testData)
+
+tree_summary <- summary(tree_model)
+tree_summary
+
+results <- confusionMatrix(testPred, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+```
+
+##### the accuracy of the 70%-30% gain ratio = 66.67% which we consider good since most of our attributes are categorical and contiuous.
+
+##### the model chose CPU as the root an as we conclude previously CPU is appropriate to be the splitting attribute since it has a huge impact on the price of a laptop.
+
+##### as we can see most of the class lables were classified correctly since the common label in our dataset is ideal price and it has the highest correct classification and for the expensive it also has most of the instances classified correctly and that consider a progress from the decision tree constructed using information gain.
+
+#### gini index
+
+```{r}
+install.packages("rpart", repos = "https://cran.r-project.org")
+library(rpart)
+install.packages("rpart.plot", repos = "https://cran.r-project.org")
+library(rpart.plot)
+
+fit.tree = rpart(price ~ ., data=trainData, method = "class", cp = 0.008)
+fit.tree
+
+rpart.plot(fit.tree)
+pred.tree = predict(fit.tree, testData, type = "class")
+
+results <- confusionMatrix(pred.tree, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+results
+```
+
+##### same as previous two trees gini index chose the CPU attribute to be the root since it has the lowest gini index.
+
+##### gini index took into consideration the expensive class label which is something we didn't see in information gain and gain ratio.
+
+##### we conclude from the 70%-30% sampling that the best method to classify our dataset is the gain ratio since we have categorical and continuous attributes and gain ratio is not biased towards multivalued attributes like information gain and gini index.
+
+##### information gain is efficient and works well but it's not accurate for our dataset since it's biased towards large number of categories.
+
+##### gini index is also a good method but it will be more effient when dealing with binary classifications.
+
+#### ---------------------------------------------------------------------------------
+
+#### 60% training 40% testing
+
+##### first we set the seed and then split the dataset into 60% training 40% testing and lastly define the formula
+
+```{r}
+set.seed(1234)
+ind <- sample(2, nrow(new_dataset), replace=TRUE, prob=c(0.6, 0.4))
+trainData <- new_dataset[ind==1,]
+testData <- new_dataset[ind==2,]
+
+myFormula <- price ~ 	Company + TypeName + Inches + ScreenResolution + Ram + OpSys + Weight + CPU + GPU + MemoryType + MemorySize
+```
+
+#### Information gain
+
+```{r}
+new_dataset_ctree <- ctree(myFormula, data=trainData)
+```
+
+##### 189 of ideal price were classified correctly, 38 were classified as inexpensive, 25 were classified as moderetly expensive, 2 were classified as expensive and 3 as very expensive.
+
+##### 119 of inexpensive were classified correctly, 8 were classified as ideal price, 2 as moderetly expensive.
+
+##### 136 of moderetly expensive were classified correctly, 58 were classified as expensive, 70 were classified as ideal price and 20 as very expensive.
+
+##### 63 of very expensive were classified correctly, 25 were classified as expensive, 4 were classified as ideal price and 22 as moderetly expensive.
+
+##### as we can see the result is not accurate since most of the attributes in the dataset is categorical.
+
+```{r}
+# check the prediction
+plot(new_dataset_ctree,type="simple") #unreadable tree
+table(predict(new_dataset_ctree), trainData$price)
+```
+
+##### 118 of ideal price were classified correctly, 36 were classified as inexpensive, 28 were classified as moderetly expensive, 2 were classified as expensive and 1 as very expensive.
+
+##### 53 of inexpensive were classified correctly and 2 as ideal price.
+
+##### 81 of moderetly expensive were classified correctly, 44 were classified as expensive, 44 were classified as ideal price, 14 were classified as inexpensive and 10 as very expensive.
+
+##### 36 of very expensive were classified correctly, 36 were classified as expensive, 2 were classified as ideal price and 22 as moderetly expensive.
+
+```{r}
+# predict on test data
+testPred <- predict(new_dataset_ctree, newdata = testData)
+table(testPred, testData$price)
+```
+
+```{r}
+#Accuracy of model 
+results <- confusionMatrix(testPred, testData$price)
+acc <- results$overall["Accuracy"]*100
+acc
+
+
+results
+as.table(results)
+as.matrix(results)
+as.matrix(results, what = "overall")
+as.matrix(results, what = "classes")
+print(results)
+```
+
+##### in this model we split the data into 60% training which model learns from the relationships and patterns within this data.
+
+##### for the remaining 40% of the data is for evaluating the model based on the testing data and therefore generalize it to a new data examples.
+
+##### the accuracy of the 60%-40% information gain = 55.49% and it's less that the 70%-30% sampling and we can coclude that 70%-30% is a better partioning for information gain than 60%-40%.
+
+##### the tree has many branches so it's difficult to understand it by only looking, however the model here also chose the CPU as the splitting attribute since it has the highest infornation gain, and since the cpu has a huge impact on the price of a laptop we can consider it good root.
+
+##### we evaluate the model performance based on sensivity and specifity
+
+##### for expensive attribute the specifity (100%) were higher than sensivity (0%) which means that the model is better at classifying the negative classes but in the contrary for the postitve classes but this result is misleading.
+
+##### the model classify the positive classes correctly for all the other attributes since the specifity is highr than the sensivity.
+
+##### overall, the decision tree we construct is not accurate since it didn't classify any laptops to expensive due to lack of expensive class in the training set
+
+#### Gain ratio - C5.0
+
+```{r}
+set.seed(1958)
+
+tree_model <- C5.0(myFormula, data = trainData)
+#plot(tree_model) unreadable tree
+
+
+testPred <- predict(tree_model, newdata = testData)
+
+tree_summary <- summary(tree_model)
+tree_summary
+
+results <- confusionMatrix(testPred, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+```
+
+##### the accuracy of the 60%-40% gain ratio = 61.079% and it also less than the accuracy of 70%-30% partioning.
+
+##### here is also the model chose CPU as the root an as we conclude previously CPU is appropriate to be the splitting attribute since it has a huge impact on the price of a laptop.
+
+##### as we can see most of the class labels were classified correctly since the common label in our dataset is ideal price and it has the highest correct classification except for class expensive most of it were classified incorrectly this due to that expensive classes number in the samplings weren't enough to classify it correctly.
+
+#### gini index
+
+```{r}
+fit.tree = rpart(price ~ ., data=trainData, method = "class", cp=0.008)
+fit.tree
+
+rpart.plot(fit.tree)
+pred.tree = predict(fit.tree, testData, type = "class")
+
+results <- confusionMatrix(pred.tree, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+print(results)
+
+```
+
+##### same as previous two trees gini index chose the CPU attribute to be the root since it has the lowest gini index.
+
+##### gini index took into consideration the expensive class label which is something we didn't see in information gain and gain ratio.
+
+##### we conclude from the 60%-40% sampling that it is not the best sampling to classify our dataset since it didn't take into consideration the expensive class label and this will lead to uncorrect results.
+
+##### information gain is misleading for this sampling since the sensitivity is 0% and 100% specifiry which is not realistic even if our dataset is imbalanced.
+
+#### -------------------------------------------------------------------------
+
+#### 80% training 20% testing
+
+```{r}
+set.seed(1234)
+ind <- sample(2, nrow(new_dataset), replace=TRUE, prob=c(0.8, 0.2))
+trainData <- new_dataset[ind==1,]
+testData <- new_dataset[ind==2,]
+
+myFormula <- price ~ 	Company + TypeName + Inches + ScreenResolution + Ram + OpSys + Weight + CPU + GPU + MemoryType + MemorySize
+```
+
+#### Information gain
+
+```{r}
+new_dataset_ctree <- ctree(myFormula, data=trainData)
+```
+
+##### 68 of expensive were classified correctly, 5 were classified as ideal price, 44 were classified as moderetly expensive and 51 as very expensive.
+
+##### 283 of ideal price were classified correctly, 41 were classified as inexpensive, 12 were classified as expensive, 58 were classified as moderetly expensive and 6 as very expensive.
+
+##### 157 of inexpensive were classified correctly, 14 were classified as ideal price, 2 as moderetly expensive.
+
+##### 135 of moderetly expensive were classified correctly, 47 were classified as expensive, 51 were classified as ideal price and 12 as very expensive.
+
+##### 42 of very expensive were classified correctly, 4 were classified as expensive, 2 were classified as ideal price and 5 as moderetly expensive.
+
+```{r}
+# check the prediction
+plot(new_dataset_ctree,type="simple") #unreadable tree
+table(predict(new_dataset_ctree), trainData$price)
+```
+
+##### 18 of expensive were classified correctly, 5 were classified as ideal price, 17 were classified as moderetly expensive and 15 as very expensive.
+
+##### 65 of ideal price were classified correctly, 14 were classified as inexpensive, 2 were classified as expensive, 18 were classified as moderetly expensive and 1 as very expensive.
+
+##### 34 of inexpensive were classified correctly and 2 were classified as ideal price.
+
+##### 36 of moderetly expensive were classified correctly, 14 were classified as expensive, 10 were classified as ideal price and 3 as very expensive.
+
+##### 7 of very expensive were classified correctly, 2 were classified as expensive and 1 as moderetly expensive.
+
+```{r}
+# predict on test data
+testPred <- predict(new_dataset_ctree, newdata = testData)
+table(testPred, testData$price)
+```
+
+```{r}
+#Accuracy of model 
+results <- confusionMatrix(testPred, testData$price)
+acc <- results$overall["Accuracy"]*100
+acc
+
+
+results
+as.table(results)
+as.matrix(results)
+as.matrix(results, what = "overall")
+as.matrix(results, what = "classes")
+print(results)
+```
+
+##### in this model we split the data into 80% training which model learns from the relationships and patterns within this data.
+
+##### for the remaining 20% of the data is for evaluating the model based on the testing data and therefore generalize it to a new data examples.
+
+##### the accuracy of the 60%-40% information gain = 60.60% and it is the highest accuracy among the the partions and this give us a first imperssion that this partioning method is the best one for our dataset, but it might be misleading since most of the data will be used as training data.
+
+##### the tree has many branches so it's difficult to understand it by only looking, however the model here also chose the CPU as the splitting attribute since it has the highest infornation gain, and since the cpu has a huge impact on the price of a laptop we can consider it good root.
+
+##### to evaluate the performance of the model we focus on the sensivity and specifity and as it appears the class labels have more specifity than sensivity which means this model focus on the negative classes more than the positive classes.
+
+##### overall, the decision tree we construct is not accurate even though it took into consideration the expensive class label but it classify many instances as other class labels when it supposed to be expensive.
+
+#### Gain ratio - C5.0
+
+```{r}
+set.seed(1958)
+
+tree_model <- C5.0(myFormula, data = trainData)
+#plot(tree_model) unreadable tree
+
+
+testPred <- predict(tree_model, newdata = testData)
+
+tree_summary <- summary(tree_model)
+tree_summary
+
+results <- confusionMatrix(testPred, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+```
+
+##### the accuracy of the 80%-20% gain ratio = 70.83% which is the highest between all the gain ratio we've calculated.
+
+##### here is also the model chose CPU as the root an as we conclude previously CPU is appropriate to be the splitting attribute since it has a huge impact on the price of a laptop.
+
+##### as we can see most of the class labels were classified correctly since the common label in our dataset is ideal price and it has the highest correct classification except for class expensive because it has a large number of incorrectly classification.
+
+#### gini index
+
+```{r}
+fit.tree = rpart(price ~ ., data=trainData, method = "class", cp=0.008)
+fit.tree
+
+rpart.plot(fit.tree)
+
+pred.tree = predict(fit.tree, testData, type = "class")
+
+results <- confusionMatrix(pred.tree, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+print(results)
+
+```
+
+##### same as all the previous gini index chose the CPU attribute to be the root since it has the lowest gini index.
+
+##### gini index took into consideration the expensive class label which is something we didn't see in information gain and gain ratio but not as much as we expected.
+
+##### we conclude from the 80%-20% sampling that the it is not best sampling to classify our dataset since it is misleading.
+
+### Results :
+
+##### From the 3 samplings we choose 70%-30% since it include most of the class labels especially expensive class label and has less misleasing in the results, and from the classification mathods the most accurate one and appropriate for our dataset is gain ratio since our attributes is mixed between categorical, numeric and continuous attributes.
+
+##### for 60%-40% it didn't include any of the expensive class label in the classification and this is not accurate so we didn't choose it.
+
+##### and for 80%-20% even though it has the highest accuracy but it's misleading since it has a huge number of trainin set and it classified many instances as other class than the correct class which is expensive.
+
+### 11: Clustering
+
+##### importing the dataset
+
+```{r}
+library(readr)
+clusdataset <- read.csv("new_dataset.csv")
+View(clusdataset)
+```
+
+##### this clustering algorithm uses the Brute-Force method in determining the correct number of clusters. We try applying a clustering algorithm with different numbers of clusters. Then, we find the number that optimizes the quality of the clustering results
+
+##### first since the dataset is mixedtype rather than one-hot-encoding, another approach into keeping all attributes in count -while using kmeans which only accept numeric- is to replace values with there faction from 0 to 1, for nominal data to not have a weight[caused by one-hot-encoding] larger than numeric data that will be normalized.
+
+##### keeping in mind that the fractions should be unique as they represent a category.
+
+#### 1: normalizing numeric attributes
+
+```{r}
+normalize = function(x) {return ((x-min(x)) / (max(x)))} 
+clusdataset$Inches = normalize(clusdataset$Inches)
+clusdataset$ScreenResolution = normalize(clusdataset$ScreenResolution)
+clusdataset$Ram = normalize(clusdataset$Ram)
+clusdataset$Weight = normalize(clusdataset$Weight)
+clusdataset$MemorySize = normalize(clusdataset$MemorySize)
+```
+
+#### 2: get the fraction for categorical attributes and assign them
+
+```{r}
+clusdataset %>% 
+  group_by( Company ) %>% 
+  summarise( percent = n() / nrow( clusdataset ) )
+clusdataset$Company <- factor(clusdataset$Company, levels = c("Acer", "Apple", "Asus", "Chuwi", "Dell", "Fujitsu", "Google", "HP", "Huawei","LG", "Lenovo", "MSI", "Mediacom", "Microsoft", "Razer", "Samsung","Toshiba", "Vero", "Xiaomi"), labels = c(0.0790, 0.0161,0.121, 0.00230, 0.228, 0.002303, 0.00230303, 0.210,0.00153,0.0023030303, 0.23, 0.0414,0.00537,0.00460, 0.0053737, 0.00691, 0.0368, 0.00307, 0.0030707))
+str(clusdataset)
+clusdataset$Company <-as.numeric(as.character(clusdataset$Company))
+
+clusdataset %>% 
+  group_by( TypeName ) %>% 
+  summarise( percent = n() / nrow( clusdataset ) )
+clusdataset$TypeName <- factor(clusdataset$TypeName, levels = c("2 in 1 Convertible", "Gaming", "Netbook", "Notebook", "Ultrabook", "Workstation"), labels = c("0.0929", "0.157 ","0.0192", "0.558 ", "0.150", "0.0223"))
+clusdataset$TypeName <-as.numeric(as.character(clusdataset$TypeName))
+
+
+clusdataset %>% 
+  group_by( OpSys ) %>% 
+  summarise( percent = n() / nrow( clusdataset ) )
+clusdataset$OpSys <- factor(clusdataset$OpSys, levels = c("Android", "Chrome OS", "Linux", "Mac OS X", "No OS", "Windows 10", "Windows 10 S", "Windows 7", "macOS"), labels = c("0.00153", "0.0207 ","0.0476", "0.00614 ", "0.0507", "0.823", "0.0061", "0.0345","0.00998"))
+clusdataset$OpSys <-as.numeric(as.character(clusdataset$OpSys))
+
+
+
+clusdataset %>% 
+  group_by( CPU ) %>% 
+  summarise( percent = n() / nrow( clusdataset ) )
+clusdataset$CPU <- factor(clusdataset$CPU, levels = c("AMD A-Series", "AMD E-Series", "Intel Atom x", "Intel Celeron", "Intel Core M", "Intel Core i3", "Intel Core i5", "Intel Core i7", "Intel Pentium", "Other"), labels = c("0.0361", "0.00691", "0.00921","0.0675", "0.0146 ", "0.104", "0.325", "0.404", "0.0230","0.00921"))
+clusdataset$CPU <-as.numeric(as.character(clusdataset$CPU))
+
+
+
+clusdataset %>% 
+  group_by( GPU ) %>% 
+  summarise( percent = n() / nrow( clusdataset ) )
+clusdataset$GPU <- factor(clusdataset$GPU, levels = c("AMD Radeon Graphics", "Intel HD Graphics", "Intel Iris Graphics", "Intel UHD Graphics", "Nvidia GeForce Graphics", "Nvidia Quadro", "Other"), labels = c("0.133", "0.490", "0.0107","0.0522", "0.282 ", "0.0238", "0.00767"))
+clusdataset$GPU <-as.numeric(as.character(clusdataset$GPU))
+
+clusdataset %>% 
+  group_by( MemoryType ) %>% 
+  summarise( percent = n() / nrow( clusdataset ) )
+clusdataset$MemoryType <- factor(clusdataset$MemoryType, levels = c(" Flash Storage", " Flash Storage HDD", " HDD", " Hybrid", " SSD", " SSD  SSD"," SSD HDD", " SSD&HDD", " SSD&Hybrid"), labels = c("0.0568", "0.000767", "0.288","0.0077", "0.49153","0.49153", "0.15367","0.15367", "0.00153"))
+clusdataset$MemoryType <-as.numeric(as.character(clusdataset$MemoryType))
+
+```
+
+#### remove class label
+
+```{r}
+clusdataset$price <-NULL
+```
+
+#### ---------------------------------------------------------------------------------
+
+#### running the Kmean method with numbers ranging from 3 to 6
+
+```{r}
+set.seed(8953)
+clusdataset <- scale(clusdataset)
+str(clusdataset)
+library(NbClust)
+library(cluster)
+library(factoextra)
+
+
+kmeanResults3<-kmeans(clusdataset, 3)
+kmeanResults3
+
+fviz_cluster(kmeanResults3, data = clusdataset)
+
+
+kmeanResults4<-kmeans(clusdataset, 4)
+kmeanResults4
+
+fviz_cluster(kmeanResults4, data = clusdataset)
+
+
+
+kmeanResults5<-kmeans(clusdataset, 5)
+kmeanResults5
+
+fviz_cluster(kmeanResults5, data = clusdataset)
+
+
+kmeanResults6<-kmeans(clusdataset, 6)
+kmeanResults6
+
+fviz_cluster(kmeanResults6, data = clusdataset)
+
+```
+
+#### ---------------------------------------------------------------------------------
+
+### looking for the optimal k number:
+
+#### 1: direct method: elbow method.
+
+```{r}
+fviz_nbclust(clusdataset, kmeans, method="wss")
+```
+
+#### the elbow graph shows the within-cluster-sum-of-squares (wcss), looking at the point that most likely to be the bend (elbow point) "3", we interpret that increasing of k does not lead to a significant reduction in wcss.
+
+#### Yet this type of bend could be considered as ambiguous as the plot does not contain a sharp elbow.
+
+#### 2: direct method: silhouette score method
+
+```{r}
+fviz_nbclust(clusdataset, kmeans, method="silhouette")
+```
+
+##### The major difference between elbow and silhouette scores is that elbow only calculates the euclidean distance whereas silhouette takes into account variables such as variance, skewness, high-low differences, etc.
+
+##### A silhouette score of one means each data point is unlikely to be assigned to another cluster. the best number of clusters in increasing order are point to one are:3,9,2,10.
+
+##### A score close to zero means each data point could be easily assigned to another cluster. by that we know 5,8 are the worst number of cluster.
+
+##### now that we have interpreted the silhouette lets take a look at the best number of clusters that fell of our brute force method
+
+```{r}
+kmeanResults9<-kmeans(clusdataset, 9)
+
+fviz_cluster(kmeanResults9, data = clusdataset)
+```
+
+##### determining the quality of the cluster by eye, there is high intra cluster similaritiy especially in cluster 4, but an extremely low inter cluster dissimliraty escpecially in cluster 6.
+
+```{r}
+kmeanResults2<-kmeans(clusdataset, 2)
+kmeanResults2
+
+
+fviz_cluster(kmeanResults2, data = clusdataset)
+```
+
+##### even with the interference and intrusion of the two clusters, compared to 9, a person can better distinguish between the two clusters. But dividing this complex dataset into two cluster, can one say it's a good approach?
+
+```{r}
+kmeanResults10<-kmeans(clusdataset, 10)
+kmeanResults10
+```
+
+```{r}
+fviz_cluster(kmeanResults10, data = clusdataset)
+```
+
+##### looking at the clusters in a 2d plot, there is a lot of intrusion between the cluster, and an extremely low inter cluster dissimilarity.
+
+##### now that we are left with two optimal points 3, 10, we'll use the gap stat method to have a better understanding.
+
+#### 3: statistical method: gap method
+
+```{r}
+fviz_nbclust(clusdataset, kmeans, nstart = 25,  method = "gap_stat", nboot = 500)+
+  labs(subtitle = "Gap statistic method")
+```
+
+##### the gap_stat method gave a 9 as the optimal.
+
+##### now that we are left with 3 distinct optimal points, we'll calculate the precision and recall of three to decide which is better.
+
+#### -----------------------------------------------------------------------------------
+
+##### B-cubed precision is a measure used to evaluate the quality of a clustering algorithm's performance, It provides insights into how well a clustering algorithm assigns data points to the correct clusters or categories .For k=3 the precision is ( 0.3404041 ) ,for k=9the precision is(0.4075375 ) for k=10 the precision is (0.4431292 ) i noticed that the precision is relativly low for all the k values .it is because the clusters generated by the algorithm are not well-separated and there is significant overlap, Overlapping clusters make it challenging to assign data points accurately to their true categories, leading to imprecise clustering results.another potential reason is the misclassification of data points into the wrong clusters. When data points are incorrectly assigned to clusters, it reduces the precision because not all data points within a cluster belong to the same true class or category.the clusters generated with k=10 have the highest precision .and the clusters generated with k=3 have the lowest precision .
+
+##### B-cubed recall is a measure used to evaluate the quality of a clustering algorithm's performance,It provides insights into how well a clustering algorithm captures all data points belonging to the same true class or category.the recall for k=3 is (0.5625485 ), for k=9 the recall is (0.2604303 ), for k=10 the recall is (0.2551368 ).i can see that the recall is low for all the k values.When data points are incorrectly assigned to clusters that do not contain all the data points from the same true class, recall decreases because not all data points are captured. the clusters generated with k=3 have the highest recall.and the clusters generated with k=10 have the lowest recall .
+
+library(readr) new_dataset\<- read.csv("new_dataset.csv")
+
+### precision and recall for k=3
+
+```{r}
+cluster_assignments <- c(kmeanResults3$cluster)
+ground_truth_labels <- c(new_dataset$price)
+data <- data.frame(cluster = cluster_assignments, label = ground_truth_labels)
+```
+
+### Function to calculate BCubed precision and recall
+
+```{r}
+calculate_bcubed_metrics <- function(data) {
+  n <- nrow(data)
+  precision_sum <- 0
+  recall_sum <- 0
+  
+  for (i in 1:n) {
+    cluster <- data$cluster[i]
+    label <- data$label[i]
+     # Count the number of items from the same category within the same cluster
+    same_category_same_cluster <- sum(data$label[data$cluster == cluster] == label)
+    
+    # Count the total number of items in the same cluster
+    total_same_cluster <- sum(data$cluster == cluster)
+    
+    # Count the total number of items with the same category
+    total_same_category <- sum(data$label == label)
+    
+    # Calculate precision and recall for the current item and add them to the sums
+    precision_sum <- precision_sum + same_category_same_cluster /total_same_cluster
+    recall_sum <- recall_sum + same_category_same_cluster / total_same_category
+  }
+  
+  # Calculate average precision and recall
+  precision <- precision_sum / n
+  recall <- recall_sum / n
+  
+  return(list(precision = precision, recall = recall))
+}
+```
+
+### Calculate BCubed precision and recall
+
+```{r}
+metrics <- calculate_bcubed_metrics(data)
+```
+
+### Extract precision and recall from the metrics
+
+```{r}
+precision <- metrics$precision
+recall <- metrics$recall
+```
+
+### Print the results
+
+```{r}
+cat("BCubed Precision:", precision, "\n")
+cat("BCubed Recall:", recall, "\n")
+
+```
+
+### precision and recall for k=9
+
+```{r}
+cluster_assignments <- c(kmeanResults9$cluster)
+ground_truth_labels <- c(new_dataset$price)
+
+data <- data.frame(cluster = cluster_assignments, label = ground_truth_labels)
+```
+
+### Function to calculate BCubed precision and recall
+
+```{r}
+calculate_bcubed_metrics <- function(data) {
+  n <- nrow(data)
+  precision_sum <- 0
+  recall_sum <- 0
+  
+  for (i in 1:n) {
+    cluster <- data$cluster[i]
+    label <- data$label[i]
+    
+    # Count the number of items from the same category within the same cluster
+    same_category_same_cluster <- sum(data$label[data$cluster == cluster] == label)
+    
+    # Count the total number of items in the same cluster
+    total_same_cluster <- sum(data$cluster == cluster)
+    
+    # Count the total number of items with the same category
+    total_same_category <- sum(data$label == label)
+    
+    # Calculate precision and recall for the current item and add them to the sums
+    precision_sum <- precision_sum + same_category_same_cluster /total_same_cluster
+    recall_sum <- recall_sum + same_category_same_cluster / total_same_category
+  }
+  
+  # Calculate average precision and recall
+  precision <- precision_sum / n
+  recall <- recall_sum / n
+  
+  return(list(precision = precision, recall = recall))
+}
+
+```
+
+### Calculate BCubed precision and recall
+
+```{r}
+metrics <- calculate_bcubed_metrics(data)
+```
+
+### Extract precision and recall from the metrics
+
+```{r}
+precision <- metrics$precision
+recall <- metrics$recall
+```
+
+### Print the results
+
+```{r}
+cat("BCubed Precision:", precision, "\n")
+cat("BCubed Recall:", recall, "\n")
+```
+
+### precision and recall for k=10
+
+```{r}
+cluster_assignments <- c(kmeanResults10$cluster)
+ground_truth_labels <- c(new_dataset$price)
+
+data <- data.frame(cluster = cluster_assignments, label = ground_truth_labels)
+```
+
+### Function to calculate BCubed precision and recall
+
+```{r}
+calculate_bcubed_metrics <- function(data) {
+  n <- nrow(data)
+  precision_sum <- 0
+  recall_sum <- 0
+  
+  for (i in 1:n) {
+    cluster <- data$cluster[i]
+    label <- data$label[i]
+    
+    # Count the number of items from the same category within the same cluster
+    same_category_same_cluster <- sum(data$label[data$cluster == cluster] == label)
+    
+    # Count the total number of items in the same cluster
+    total_same_cluster <- sum(data$cluster == cluster)
+    
+    # Count the total number of items with the same category
+    total_same_category <- sum(data$label == label)
+    
+    # Calculate precision and recall for the current item and add them to the sums
+    precision_sum <- precision_sum + same_category_same_cluster /total_same_cluster
+    recall_sum <- recall_sum + same_category_same_cluster / total_same_category
+  }
+  
+  # Calculate average precision and recall
+  precision <- precision_sum / n
+  recall <- recall_sum / n
+  
+  return(list(precision = precision, recall = recall))
+}
+
+```
+
+### Calculate BCubed precision and recall
+
+```{r}
+metrics <- calculate_bcubed_metrics(data)
+
+```
+
+### Extract precision and recall from the metrics
+
+```{r}
+precision <- metrics$precision
+recall <- metrics$recall
+```
+
+### Print the results
+
+```{r}
+cat("BCubed Precision:", precision, "\n")
+cat("BCubed Recall:", recall, "\n")
+```
+
+##### In a silhouette plot, each data point is represented by a vertical bar. The height of the bar corresponds to the silhouette score of the data point.By comparing the plots , k=9 and k=10 have higher silhouette scores than k=3 but all of them are closer to 0 than 1 A score close to 0 means that the data point is on or very close to the decision boundary between two neighboring clusters.also, all the plots have negative scores.A score close to -1 indicates that the data point is assigned to the wrong cluster and would be better off in another cluster.
+
+### Average silhouette coeffecient for k=10
+
+```{r}
+avg_sil <- silhouette(kmeanResults10$cluster,dist(clusdataset))
+fviz_silhouette(avg_sil)
+```
+
+### Average silhouette coeffecient for k=3
+
+```{r}
+avg_sil <- silhouette(kmeanResults3$cluster,dist(clusdataset))
+fviz_silhouette(avg_sil)
+```
+
+### Average silhouette coeffecient for k=9
+
+```{r}
+avg_sil <- silhouette(kmeanResults9$cluster,dist(clusdataset))
+fviz_silhouette(avg_sil)
+```
+
+##### Total within-cluster sum of squares represents the sum of the squared distances between each data point in a cluster and the centroid of that cluster. In other words, it measures the variation or dispersion of data points within each cluster.the value of twss for k=3 is 9970.073 ,for k=10 its 5970.864 and for k=9 it is 6271.242(i noticed that the values are high).A large Total Within-Cluster Sum of Squares (TWCSS) suggests that the dataset's clusters are spread out or not particularly compact. A high TWCSS in the context of clustering indicates that the data points within each cluster are spread out over a broader area and that the clusters are not densely packed around their centroids.
+
+```{r}
+### Total within-cluster sum of squares for k=9 
+km<-kmeans(clusdataset, 9,iter.max =140,algorithm="Lloyd",nstart=100)
+twss<-sum(km$withinss)
+print(twss)
+```
+
+```{r}
+### Total within-cluster sum of squares for k=3
+km<-kmeans(clusdataset, 3,iter.max =140,algorithm="Lloyd",nstart=100)
+twss<-sum(km$withinss)
+print(twss)
+```
+
+```{r}
+### Total within-cluster sum of squares for k=10
+km<-kmeans(clusdataset, 10,iter.max =140,algorithm="Lloyd",nstart=100)
+twss<-sum(km$withinss)
+print(twss)
+```
+
+#### ----------------------------------------------------------------------------------
+
+### Enhancing the quality of clusters:
+
+### now that we have noticed a low precision measure. we will try enhancing the cluster by approaching the data differently.
+
+### using One-Hot-Encoding rather than fragment approach:
+
+```{r}
+clusdataset2 <- read.csv("new_dataset.csv")
+
+normalize = function(x) {return ((x-min(x)) / (max(x)))} 
+clusdataset2$Inches = normalize(clusdataset2$Inches)
+clusdataset2$ScreenResolution = normalize(clusdataset2$ScreenResolution)
+clusdataset2$Ram = normalize(clusdataset2$Ram)
+clusdataset2$Weight = normalize(clusdataset2$Weight)
+clusdataset2$MemorySize = normalize(clusdataset2$MemorySize)
+```
+
+#### 2: get the fraction for categorical attributes and assign
+
+```{r}
+clusdataset2 %>% 
+  group_by( Company ) %>% 
+  summarise( percent = n() / nrow( clusdataset2 ) )
+clusdataset2$Company <- factor(clusdataset2$Company, levels = c("Acer", "Apple", "Asus", "Chuwi", "Dell", "Fujitsu", "Google", "HP", "Huawei","LG", "Lenovo", "MSI", "Mediacom", "Microsoft", "Razer", "Samsung","Toshiba", "Vero", "Xiaomi"), labels = c(1, 2,3, 4, 5, 6, 7, 8,9,10, 11, 12,13,14, 15, 16, 17, 18, 19))
+str(clusdataset)
+clusdataset2$Company <-as.numeric(as.character(clusdataset2$Company))
+
+clusdataset2 %>% 
+  group_by( TypeName ) %>% 
+  summarise( percent = n() / nrow( clusdataset2 ) )
+clusdataset2$TypeName <- factor(clusdataset2$TypeName, levels = c("2 in 1 Convertible", "Gaming", "Netbook", "Notebook", "Ultrabook", "Workstation"), labels = c(1, 2,3, 4, 5, 6))
+clusdataset2$TypeName <-as.numeric(as.character(clusdataset2$TypeName))
+
+
+clusdataset2 %>% 
+  group_by( OpSys ) %>% 
+  summarise( percent = n() / nrow( clusdataset2 ) )
+clusdataset2$OpSys <- factor(clusdataset2$OpSys, levels = c("Android", "Chrome OS", "Linux", "Mac OS X", "No OS", "Windows 10", "Windows 10 S", "Windows 7", "macOS"), labels = c(1, 2,3, 4, 5, 6, 7, 8,9))
+clusdataset2$OpSys <-as.numeric(as.character(clusdataset2$OpSys))
+
+
+
+clusdataset2 %>% 
+  group_by( CPU ) %>% 
+  summarise( percent = n() / nrow( clusdataset2 ) )
+clusdataset2$CPU <- factor(clusdataset2$CPU, levels = c("AMD A-Series", "AMD E-Series", "Intel Atom x", "Intel Celeron", "Intel Core M", "Intel Core i3", "Intel Core i5", "Intel Core i7", "Intel Pentium", "Other"), labels = c(1, 2,3, 4, 5, 6, 7, 8,9,10))
+clusdataset2$CPU <-as.numeric(as.character(clusdataset2$CPU))
+
+
+
+clusdataset2 %>% 
+  group_by( GPU ) %>% 
+  summarise( percent = n() / nrow( clusdataset2 ) )
+clusdataset2$GPU <- factor(clusdataset2$GPU, levels = c("AMD Radeon Graphics", "Intel HD Graphics", "Intel Iris Graphics", "Intel UHD Graphics", "Nvidia GeForce Graphics", "Nvidia Quadro", "Other"), labels = c(1, 2,3, 4, 5, 6, 7))
+clusdataset2$GPU <-as.numeric(as.character(clusdataset2$GPU))
+
+clusdataset2 %>% 
+  group_by( MemoryType ) %>% 
+  summarise( percent = n() / nrow( clusdataset2 ) )
+clusdataset2$MemoryType <- factor(clusdataset2$MemoryType, levels = c(" Flash Storage", " Flash Storage HDD", " HDD", " Hybrid", " SSD", " SSD  SSD"," SSD HDD", " SSD&HDD", " SSD&Hybrid"), labels = c(1, 2,3, 4, 5, 6, 7, 8,9))
+clusdataset2$MemoryType <-as.numeric(as.character(clusdataset2$MemoryType))
+
+```
+
+### remove class label
+
+```{r}
+clusdataset2$price <-NULL
+
+set.seed(8953)
+clusdataset2 <- scale(clusdataset2)
+str(clusdataset)
+
+
+skmeanResults2<-kmeans(clusdataset2, 2)
+skmeanResults2
+fviz_cluster(skmeanResults2, data = clusdataset2)
+
+
+skmeanResults3<-kmeans(clusdataset2, 3)
+skmeanResults3
+fviz_cluster(skmeanResults3, data = clusdataset2)
+
+
+skmeanResults4<-kmeans(clusdataset2, 4)
+skmeanResults4
+fviz_cluster(skmeanResults4, data = clusdataset2)
+
+
+
+skmeanResults5<-kmeans(clusdataset, 5)
+skmeanResults5
+fviz_cluster(skmeanResults5, data = clusdataset2)
+
+
+skmeanResults6<-kmeans(clusdataset, 6)
+skmeanResults6
+fviz_cluster(skmeanResults6, data = clusdataset2)
+
+
+fviz_nbclust(clusdataset2, kmeans, method="wss")
+
+fviz_nbclust(clusdataset2, kmeans, method="silhouette")
+
+```
+
+### precision and recall for k=2
+
+```{r}
+cluster_assignments <- c(skmeanResults2$cluster)
+ground_truth_labels <- c(new_dataset$price)
+
+data <- data.frame(cluster = cluster_assignments, label = ground_truth_labels)
+```
+
+### Function to calculate BCubed precision and recall
+
+```{r}
+calculate_bcubed_metrics <- function(data) {
+  n <- nrow(data)
+  precision_sum <- 0
+  recall_sum <- 0
+  for (i in 1:n) {
+    cluster <- data$cluster[i]
+    label <- data$label[i]
+    
+    # Count the number of items from the same category within the same cluster
+    same_category_same_cluster <- sum(data$label[data$cluster == cluster] == label)
+    
+    # Count the total number of items in the same cluster
+    total_same_cluster <- sum(data$cluster == cluster)
+    
+    # Count the total number of items with the same category
+    total_same_category <- sum(data$label == label)
+    
+    # Calculate precision and recall for the current item and add them to the sums
+    precision_sum <- precision_sum + same_category_same_cluster /total_same_cluster
+    recall_sum <- recall_sum + same_category_same_cluster / total_same_category
+  }
+  
+  # Calculate average precision and recall
+  precision <- precision_sum / n
+  recall <- recall_sum / n
+  
+  return(list(precision = precision, recall = recall))
+}
+```
+
+### Calculate BCubed precision and recall
+
+```{r}
+metrics <- calculate_bcubed_metrics(data)
+```
+
+### Extract precision and recall from the metrics
+
+```{r}
+precision <- metrics$precision
+recall <- metrics$recall
+```
+
+### Print the results
+
+```{r}
+cat("BCubed Precision:", precision, "\n")
+cat("BCubed Recall:", recall, "\n")
+```
+
+##### we see that both elbow and silhouette method agreed on 2 being the optimal point, which gave us a recall of :0.6699069 yet a precision of: 0.2611999
+
+#### ------------------------------------------------------------------------------
+
+##### having the precision still low, we will try approaching the data by only selecting core numeric data.
+
+```{r}
+clusdataset3 <- read.csv("new_dataset.csv")
+```
+
+```{r}
+normalize = function(x) {return ((x-min(x)) / (max(x)))} 
+clusdataset3$Inches = normalize(clusdataset3$Inches)
+clusdataset3$ScreenResolution = normalize(clusdataset3$ScreenResolution)
+clusdataset3$Ram = normalize(clusdataset3$Ram)
+clusdataset3$Weight = normalize(clusdataset3$Weight)
+clusdataset3$MemorySize = normalize(clusdataset3$MemorySize)
+
+```
+
+###remove class label
+
+```{r}
+clusdataset3$price <-NULL
+clusdataset3$MemoryType <- NULL
+clusdataset3$GPU <- NULL
+clusdataset3$CPU <- NULL
+clusdataset3$OpSys <- NULL
+clusdataset3$TypeName <- NULL
+clusdataset3$Company <- NULL
+```
+
+```{r}
+set.seed(8953)
+clusdataset3 <- scale(clusdataset3)
+str(clusdataset)
+tkmeanResults2<-kmeans(clusdataset3, 2)
+tkmeanResults2
+fviz_cluster(tkmeanResults2, data = clusdataset3)
+
+
+tkmeanResults3<-kmeans(clusdataset3, 3)
+tkmeanResults3
+fviz_cluster(tkmeanResults3, data = clusdataset3)
+
+
+tkmeanResults4<-kmeans(clusdataset3, 4)
+tkmeanResults4
+fviz_cluster(tkmeanResults4, data = clusdataset3)
+
+
+
+tkmeanResults5<-kmeans(clusdataset, 5)
+tkmeanResults5
+fviz_cluster(tkmeanResults5, data = clusdataset3)
+
+
+tkmeanResults6<-kmeans(clusdataset, 6)
+tkmeanResults6
+fviz_cluster(tkmeanResults6, data = clusdataset3)
+
+
+tkmeanResults8<-kmeans(clusdataset, 8)
+tkmeanResults8
+fviz_cluster(tkmeanResults6, data = clusdataset3)
+
+
+fviz_nbclust(clusdataset3, kmeans, method="wss")
+
+fviz_nbclust(clusdataset3, kmeans, method="silhouette")
+
+
+```
+
+### precision and recall for k=2
+
+```{r}
+cluster_assignments <- c(tkmeanResults2$cluster)
+ground_truth_labels <- c(new_dataset$price)
+
+data <- data.frame(cluster = cluster_assignments, label = ground_truth_labels)
+```
+
+### Function to calculate BCubed precision and recall
+
+```{r}
+calculate_bcubed_metrics <- function(data) {
+  n <- nrow(data)
+  precision_sum <- 0
+  recall_sum <- 0
+  for (i in 1:n) {
+    cluster <- data$cluster[i]
+    label <- data$label[i]
+    
+    # Count the number of items from the same category within the same cluster
+    same_category_same_cluster <- sum(data$label[data$cluster == cluster] == label)
+    
+    # Count the total number of items in the same cluster
+    total_same_cluster <- sum(data$cluster == cluster)
+    
+    # Count the total number of items with the same category
+    total_same_category <- sum(data$label == label)
+    
+    # Calculate precision and recall for the current item and add them to the sums
+    precision_sum <- precision_sum + same_category_same_cluster /total_same_cluster
+    recall_sum <- recall_sum + same_category_same_cluster / total_same_category
+  }
+  
+  # Calculate average precision and recall
+  precision <- precision_sum / n
+  recall <- recall_sum / n
+  
+  return(list(precision = precision, recall = recall))
+}
+
+```
+
+### Calculate BCubed precision and recall
+
+metrics \<- calculate_bcubed_metrics(data)
+
+### Extract precision and recall from the metrics
+
+```{r}
+precision <- metrics$precision
+recall <- metrics$recall
+```
+
+### Print the results
+
+```{r}
+cat("BCubed Precision:", precision, "\n")
+cat("BCubed Recall:", recall, "\n")
+```
+
+###-------------------------------------------------------------------------------------
+
+### precision and recall for k=8
+
+```{r}
+cluster_assignments <- c(tkmeanResults8$cluster)
+ground_truth_labels <- c(new_dataset$price)
+
+data <- data.frame(cluster = cluster_assignments, label = ground_truth_labels)
+
+```
+
+### Function to calculate BCubed precision and recall
+
+```{r}
+calculate_bcubed_metrics <- function(data) {
+  n <- nrow(data)
+  precision_sum <- 0
+  recall_sum <- 0
+  
+  for (i in 1:n) {
+    cluster <- data$cluster[i]
+    label <- data$label[i]
+    
+    # Count the number of items from the same category within the same cluster
+    same_category_same_cluster <- sum(data$label[data$cluster == cluster] == label)
+    
+    # Count the total number of items in the same cluster
+    total_same_cluster <- sum(data$cluster == cluster)
+    
+    # Count the total number of items with the same category
+    total_same_category <- sum(data$label == label)
+    
+    # Calculate precision and recall for the current item and add them to the sums
+    precision_sum <- precision_sum + same_category_same_cluster /total_same_cluster
+    recall_sum <- recall_sum + same_category_same_cluster / total_same_category
+  }
+  
+  # Calculate average precision and recall
+  precision <- precision_sum / n
+  recall <- recall_sum / n
+  
+  return(list(precision = precision, recall = recall))
+}
+
+```
+
+### Calculate BCubed precision and recall
+
+```{r}
+metrics <- calculate_bcubed_metrics(data)
+```
+
+### Extract precision and recall from the metrics
+
+```{r}
+precision <- metrics$precision
+recall <- metrics$recall
+```
+
+### Print the results
+
+```{r}
+cat("BCubed Precision:", precision, "\n")
+cat("BCubed Recall:", recall, "\n")
+```
+
+#### there is a difference in the optimal point between the elbow and the silhouette method, yet even with a clearer clustering plot, the Precision: 0.2489709 and Recall: 0.569642 for k=2 (elbow optimal), where Precision: 0.3636168 and Recall: 0.2447948 for k=8 (silhouette optimal).
+
+#### -----------------------------------------------------------------------------------
+
+### conclusion:
+
+##### the best precision and recall measure we could get was: for fragment encoding k=10 the recall is (0.2051488) precision is(0.4292558 ) [highest precision], and one-hot-encoding k=2 recall is(0.6699069) precision is(0.2611999 ) [highest recall] . we first well analyse sources of issue of why the BCubed measures were low.
+
+##### after we approached the dataset with 2 different encoding methods, we then approached the data by only focusing on numeric data to answer the question: does the problem lie on the encoding? and the answer came out to be that encoding the data and pitting the categorical attributes in count prduced the best outcomes, so what other issues could we discuss?
+
+### a deep study of low outcomes of the BCubed measures:
+
+##### First lets look at the Gap-stat method and why the optimal point was not a real optimal, this indicates a fail of the method, so under which conditions are the Gap-Statistics likely to fail?
+
+##### -----------------------------------------------------------------------------------
+
+### There are three scenarios that could occur:
+
+##### Underestimation of clusters, Overestimation of clusters, and In general,
+
+##### underestimation: If two or three clusters are very close together and the other clusters are far apart, it tends to underestimate.
+
+##### Overestimation:If all clusters are close to together, it rather overestimates than underestimates.
+
+##### In general: Both underestimation and overestimation depend mostly on the randomly initialized centroids. When some of them get omitted due to random unluck, the break in the within-cluster distance forces the gap statistic to produce the optimum cluster earlier.
+
+##### and by observing the clustering plot most likely overestimation happened.
+
+##### -----------------------------------------------------------------------------------
+
+### elbow method fail conditions:
+
+##### the elbow method might not be the right for the problem. (which most likely happened when we faced an ambiguous bend)
+
+##### K-means is highly sensitive to preprocessing. If one attribute is on a much larger scale than the others, it will dominate the output.
+
+##### this is a conclusion of the results, and to enhance the result we provide a solution of future work (enhancing the dataset):
+
+### Future work:
+
+##### in case of imbalanced data, we propose that a resampling approach to the dataset - Clustering Based Oversampling for improved learning-. The essential idea behind the proposed method is to use the distance between a minority class sample and its respective cluster centroid to infer the number of new sample points to be generated for that minority class sample. The proposed algorithm has very less dependence on the technique used for finding cluster centroids and does not effect the majority class learning in any way. It also improves learning from imbalanced data by incorporating the distribution structure of minority class samples in generating of new data samples. The newly generated minority class data is handled in a way as to prevent outlier production and overfitting.
+
+#### -----------------------------------------------------------------------------------
