@@ -1,0 +1,483 @@
+---
+title: "PHASE 3"
+output: html_notebook
+ml_document:
+  html_notebook: default
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+# DATA MINING PHASE 3
+
+## Main Goal :
+
+### nowdays laptops are important because they offer portability, convenience, and functionality. since they allow us to work, study, connect with other people it become an essential tools for us to do our work and study, and the most important factor to choose a laptop is the price so our role in this project is predict prices from different companies depending on several feature such as type name, CPU, GPU, screen resolution and more. we chose this dataset because we think it will help us build a classification and clustering model that will help others choose the appropriate laptop that satisfies their prefrences and budget.
+
+## Dataset source :
+
+### <https://www.kaggle.com/datasets/muhammetvarl/laptop-price>
+
+## Number of objects :
+
+### 1303
+
+## Number of attribute :
+
+### 13
+
+## dataset summary :
+
+##### The dataset includes :
+
+##### 1- Laptop ID : Numeric - a unique number identifies laptops - has values from 1 to 1303.
+
+##### 2- Company : String - laptop manufacture - include companies like dell, HP, lenovo, and asos ... etc.
+
+##### 3- Product : String - brand and model for each company.
+
+##### 4- TypeName : String - type of the laptop ( notebook,ultrabook,gaming...etc).
+
+##### 5- Inches : Numeric - screen size - ranges between 10.1 to 18.4
+
+##### 6- ScreenResulotion : Numeric - screen resulotion - ranges between 1366x768 and 3840x2160.
+
+##### 7- CPU : String - central processing unit - Intel core i3, intel core i5, intel i5 and more.
+
+##### 8- Ram : numeric - laptop ram - 8GB, 16GB, 4GB, 2GB, 12GB, 6GB, 32GB, 24GB, and 64GB.
+
+##### 9- Memory : String - hard disk / SSD memory - HDD, SSD, flash storage and hybrid.
+
+##### 10- Gpu : String - graphics processing unit - AMD, Nvidia, and Intel.
+
+##### 11- OpSys : String - operating system -macOS, No OS, Windows 10, Mac OS X, Linux, Android, Windows 10 S, Chrome OS, and Windows.
+
+##### 12- Weight : numeric - laptop weight - ranges between 0.81Kg to 4.7Kg.
+
+##### 13- Price_euros : Numeric - price in euro - ranges between 174 to 6099 euros.
+
+## class lables :
+
+##### inexpensive
+
+##### ideal price
+
+##### moderetly expensive
+
+##### expinsive
+
+##### very expensive
+
+##### importing needed packages
+
+
+
+### 10: classification 
+
+##### read the new dataset after preproccessing and cleaning 
+```{r}
+library(readr)
+new_dataset <- read.csv("./new_dataset.csv", header = TRUE , sep = ',' , stringsAsFactors = T)
+```
+
+##### importing needed packages 
+```{r}
+install.packages('party')
+library(party)
+install.packages('caret')
+library(caret)
+install.packages("rpart")
+library(rpart)
+install.packages("rpart.plot")
+library(rpart.plot)
+```
+
+
+
+#### We split the dataset into training data, and testing data using random sampling. We splited our data 70-30%, 60-40%, and 80-20%.
+
+#### 70% training 30% testing
+
+##### first we set the seed and then split the dataset into 70% training 30% testing and lastly define the formula
+
+```{r}
+set.seed(1234)
+ind <- sample(2, nrow(new_dataset), replace=TRUE, prob=c(0.7, 0.3))
+trainData <- new_dataset[ind==1,]
+testData <- new_dataset[ind==2,]
+
+myFormula <- price ~ 	Company + TypeName + Inches + ScreenResolution + Ram + OpSys + Weight + CPU + GPU + MemoryType + MemorySize
+```
+
+#### Information gain
+
+##### we used ctree as decision tree function
+
+```{r}
+new_dataset_ctree <- ctree(myFormula, data=trainData)
+```
+
+##### 27 of expensive were classified correctly and 18 were classified as moderetly expensive , very expensive. 
+##### 199 of ideal price were classified correctly, 24 were classified as inexpensive, 23 were classified as expensive and 2 as very expensive. 
+##### 154 of inexpensive were classified correctly, 32 were classified as ideal price, 2 as moderetly expensive. 
+##### 152 of moderetly expensive were classified correctly, 66 were classified as expensive, 94 were classified as ideal price and 18 as very expensive. 
+##### 58 of very expensive were classified correctly, 16 were classified as expensive, 4 were classified as ideal price and 15 as moderetly expensive. 
+##### as we can see the result is not accurate since our dataset is imbalanced. 
+
+```{r}
+# check the prediction
+plot(new_dataset_ctree,type="simple") #unreadable tree
+table(predict(new_dataset_ctree), trainData$price)
+```
+
+##### 9 of expensive were classified correctly and 12 were classified as moderetly expensive and 11 as very expensive. 
+##### 70 of ideal price were classified correctly, 12 were classified as inexpensive, 15 were classified as moderetly expensive and 1 as very expensive. 
+##### 55 of inexpensive were classified correctly and 11 as ideal price. 
+##### 73 of moderetly expensive were classified correctly, 33 were classified as expensive, 25 were classified as ideal price, 1 were classified as inexpensive and 10 as very expensive. 
+##### 19 of very expensive were classified correctly, 16 were classified as expensive, 2 were classified as ideal price and 6 as moderetly expensive. 
+
+##### we conclude from these results that information gain is not the most appropriate method to classify our dataset. 
+```{r}
+# predict on test data
+testPred <- predict(new_dataset_ctree, newdata = testData)
+table(testPred, testData$price)
+```
+
+##### calculating the overall accuracy 
+```{r}
+#Accuracy of model 
+results <- confusionMatrix(testPred, testData$price)
+acc <- results$overall["Accuracy"]*100
+acc
+
+
+results
+as.table(results)
+as.matrix(results)
+as.matrix(results, what = "overall")
+as.matrix(results, what = "classes")
+print(results)
+```
+
+##### in this model we split the data into 70% training which model learns from the relationships and patterns within this data. 
+##### for the remaining 30% of the data is for evaluating the model based on the testing data and therefore generalize it to a new data examples. 
+
+##### the accuracy of the 70%-30% information gain = 59.32% which we can consider not too high but appropriate for our dataset since it is umbalanced. 
+
+##### the tree has many branches so it's difficult to understand it by only looking, however the model choosed the CPU as the splitting attribute since it has the highest infornation gain, and since the cpu has a huge impact on the price of a laptop we can consider it good root. 
+
+##### we evaluate the model performance based on sensivity and specifity 
+##### for expensive attribute the specifity (92.8%) were higher than sensivity (15.5%) which means that the model is better at classifying the negative classes but in the contrary for the postitve classes. 
+##### the model classify the negative classes correctly for all the other attributes since the specifity is highr than the sensivity. 
+
+##### overall, the decision tree we construct is not accurate since it didn't classify much laptops to expensive due to lack of expensive class in the training set. 
+
+
+
+#### Gain ratio - C5.0
+
+```{r}
+remove.packages("C50")
+install.packages("C50")
+library(C50)
+
+set.seed(1958)
+
+tree_model <- C5.0(myFormula, data = trainData)
+#plot(tree_model)
+
+
+testPred <- predict(tree_model, newdata = testData)
+
+tree_summary <- summary(tree_model)
+tree_summary
+
+results <- confusionMatrix(testPred, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+```
+
+##### the accuracy of the 70%-30% gain ratio = 66.67% which we consider good since most of our attributes are categorical and contiuous.
+##### the model chose CPU as the root an as we conclude previously CPU is appropriate to be the splitting attribute since it has a huge impact on the price of a laptop. 
+
+##### as we can see most of the class lables were classified correctly since the common label in our dataset is ideal price and it has the highest correct classification and for the expensive it also has most of the instances classified correctly and that consider a progress from the decision tree constructed using information gain.  
+
+
+#### gini index
+
+```{r}
+install.packages("rpart")
+library(rpart)
+install.packages("rpart.plot")
+library(rpart.plot)
+
+fit.tree = rpart(myFormula, data=trainData, method = "class")
+fit.tree
+
+rpart.plot(fit.tree)
+
+pred.tree = predict(fit.tree, testData, type = "class")
+
+results <- confusionMatrix(pred.tree, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+```
+
+##### same as previous two trees gini index chose the CPU attribute to be the root since it has the lowest gini index. 
+##### gini index took into consideration the expensive class label which is something we didn't see in information gain and gain ratio. 
+
+
+
+##### we conclude from the 70%-30% sampling that the best method to classify our dataset is the gain ratio since we have categorical and continuous attributes and gain ratio is not biased towards multivalued attributes like information gain and gini index.  
+##### information gain is efficient and works well but it's not accurate for our dataset since it's biased towards large number of categories. 
+##### gini index is also a good method but it will be more effient when dealing with binary classifications. 
+
+#### ---------------------------------------------------------------------------------
+
+#### 60% training 40% testing
+
+
+##### first we set the seed and then split the dataset into 60% training 40% testing and lastly define the formula
+
+```{r}
+set.seed(1234)
+ind <- sample(2, nrow(new_dataset), replace=TRUE, prob=c(0.6, 0.4))
+trainData <- new_dataset[ind==1,]
+testData <- new_dataset[ind==2,]
+
+myFormula <- price ~ 	Company + TypeName + Inches + ScreenResolution + Ram + OpSys + Weight + CPU + GPU + MemoryType + MemorySize
+```
+
+#### Information gain
+
+```{r}
+new_dataset_ctree <- ctree(myFormula, data=trainData)
+```
+
+
+##### 189 of ideal price were classified correctly, 38 were classified as inexpensive, 25 were classified as moderetly expensive, 2 were classified as expensive and 3 as very expensive. 
+##### 119 of inexpensive were classified correctly, 8 were classified as ideal price, 2 as moderetly expensive. 
+##### 136 of moderetly expensive were classified correctly, 58 were classified as expensive, 70 were classified as ideal price and 20 as very expensive. 
+##### 63 of very expensive were classified correctly, 25 were classified as expensive, 4 were classified as ideal price and 22 as moderetly expensive. 
+##### as we can see the result is not accurate since most of the attributes in the dataset is categorical.
+
+```{r}
+# check the prediction
+plot(new_dataset_ctree,type="simple") #unreadable tree
+table(predict(new_dataset_ctree), trainData$price)
+```
+
+##### 118 of ideal price were classified correctly, 36 were classified as inexpensive, 28 were classified as moderetly expensive, 2 were classified as expensive and 1 as very expensive. 
+##### 53 of inexpensive were classified correctly and 2 as ideal price. 
+##### 81 of moderetly expensive were classified correctly, 44 were classified as expensive, 44 were classified as ideal price, 14 were classified as inexpensive and 10 as very expensive. 
+##### 36 of very expensive were classified correctly, 36 were classified as expensive, 2 were classified as ideal price and 22 as moderetly expensive. 
+```{r}
+# predict on test data
+testPred <- predict(new_dataset_ctree, newdata = testData)
+table(testPred, testData$price)
+```
+
+```{r}
+#Accuracy of model 
+results <- confusionMatrix(testPred, testData$price)
+acc <- results$overall["Accuracy"]*100
+acc
+
+
+results
+as.table(results)
+as.matrix(results)
+as.matrix(results, what = "overall")
+as.matrix(results, what = "classes")
+print(results)
+```
+
+##### in this model we split the data into 60% training which model learns from the relationships and patterns within this data. 
+##### for the remaining 40% of the data is for evaluating the model based on the testing data and therefore generalize it to a new data examples. 
+
+##### the accuracy of the 60%-40% information gain = 55.49% and it's less that the 70%-30% sampling and we can coclude that 70%-30% is a better partioning for information gain than 60%-40%. 
+
+##### the tree has many branches so it's difficult to understand it by only looking, however the model here also chose the CPU as the splitting attribute since it has the highest infornation gain, and since the cpu has a huge impact on the price of a laptop we can consider it good root. 
+
+
+##### we evaluate the model performance based on sensivity and specifity 
+##### for expensive attribute the specifity (100%) were higher than sensivity (0%) which means that the model is better at classifying the negative classes but in the contrary for the postitve classes but this result is misleading. 
+##### the model classify the positive classes correctly for all the other attributes since the specifity is highr than the sensivity.
+
+##### overall, the decision tree we construct is not accurate since it didn't classify any laptops to expensive due to lack of expensive class in the training set 
+
+
+
+#### Gain ratio - C5.0
+
+```{r}
+set.seed(1958)
+
+tree_model <- C5.0(myFormula, data = trainData)
+#plot(tree_model) unreadable tree
+
+
+testPred <- predict(tree_model, newdata = testData)
+
+tree_summary <- summary(tree_model)
+tree_summary
+
+results <- confusionMatrix(testPred, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+```
+
+##### the accuracy of the 60%-40% gain ratio = 61.079% and it also less than the accuracy of 70%-30% partioning. 
+##### here is also the model chose CPU as the root as we conclude previously CPU is appropriate to be the splitting attribute since it has a huge impact on the price of a laptop. 
+
+##### as we can see most of the class labels were classified correctly since the common label in our dataset is ideal price and it has the highest correct classification except for class expensive most of it were classified incorrectly this due to that expensive classes number in the samplings weren't enough to classify it correctly.  
+
+
+#### gini index
+
+```{r}
+fit.tree = rpart(myFormula, data=trainData, method = "class")
+fit.tree
+
+rpart.plot(fit.tree)
+
+pred.tree = predict(fit.tree, testData, type = "class")
+
+results <- confusionMatrix(pred.tree, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+
+```
+
+##### same as previous two trees gini index chose the CPU attribute to be the root since it has the lowest gini index. 
+##### gini index took into consideration the expensive class label which is something we didn't see in information gain and gain ratio.
+
+##### we conclude from the 60%-40% sampling that it is not the best sampling to classify our dataset since it didn't take into consideration the expensive class label and this will lead to uncorrect results. 
+
+##### information gain is misleading for this sampling since the sensitivity is 0% and 100% specifity which is not realistic even if our dataset is imbalanced. 
+
+
+#### -------------------------------------------------------------------------
+
+#### 80% training 20% testing
+
+```{r}
+set.seed(1234)
+ind <- sample(2, nrow(new_dataset), replace=TRUE, prob=c(0.8, 0.2))
+trainData <- new_dataset[ind==1,]
+testData <- new_dataset[ind==2,]
+
+myFormula <- price ~ 	Company + TypeName + Inches + ScreenResolution + Ram + OpSys + Weight + CPU + GPU + MemoryType + MemorySize
+```
+
+#### Information gain
+
+```{r}
+new_dataset_ctree <- ctree(myFormula, data=trainData)
+```
+
+##### 68 of expensive were classified correctly, 5 were classified as ideal price, 44 were classified as moderetly expensive and 51 as very expensive. 
+##### 283 of ideal price were classified correctly, 41 were classified as inexpensive, 12 were classified as expensive, 58 were classified as moderetly expensive and 6 as very expensive. 
+##### 157 of inexpensive were classified correctly, 14 were classified as ideal price, 2 as moderetly expensive. 
+##### 135 of moderetly expensive were classified correctly, 47 were classified as expensive, 51 were classified as ideal price and 12 as very expensive. 
+##### 42 of very expensive were classified correctly, 4 were classified as expensive, 2 were classified as ideal price and 5 as moderetly expensive.
+
+```{r}
+# check the prediction
+plot(new_dataset_ctree,type="simple") #unreadable tree
+table(predict(new_dataset_ctree), trainData$price)
+```
+
+##### 18 of expensive were classified correctly, 5 were classified as ideal price, 17 were classified as moderetly expensive and 15 as very expensive.  
+##### 65 of ideal price were classified correctly, 14 were classified as inexpensive, 2 were classified as expensive, 18 were classified as moderetly expensive and 1 as very expensive. 
+##### 34 of inexpensive were classified correctly and 2 were classified as ideal price. 
+##### 36 of moderetly expensive were classified correctly, 14 were classified as expensive, 10 were classified as ideal price and 3 as very expensive. 
+##### 7 of very expensive were classified correctly, 2 were classified as expensive and 1 as moderetly expensive. 
+
+```{r}
+# predict on test data
+testPred <- predict(new_dataset_ctree, newdata = testData)
+table(testPred, testData$price)
+```
+
+
+```{r}
+#Accuracy of model 
+results <- confusionMatrix(testPred, testData$price)
+acc <- results$overall["Accuracy"]*100
+acc
+
+
+results
+as.table(results)
+as.matrix(results)
+as.matrix(results, what = "overall")
+as.matrix(results, what = "classes")
+print(results)
+```
+
+##### in this model we split the data into 80% training which model learns from the relationships and patterns within this data. 
+##### for the remaining 20% of the data is for evaluating the model based on the testing data and therefore generalize it to a new data examples. 
+
+##### the accuracy of the 60%-40% information gain = 60.60% and it is the highest accuracy among the the partions and this give us a first imperssion that this partioning method is the best one for our dataset, but it might be misleading since most of the data will be used as training data. 
+
+##### the tree has many branches so it's difficult to understand it by only looking, however the model here also chose the CPU as the splitting attribute since it has the highest infornation gain, and since the cpu has a huge impact on the price of a laptop we can consider it good root. 
+
+
+##### to evaluate the performance of the model we focus on the sensivity and specifity and as it appears the class labels have more specifity than sensivity which means this model focus on the negative classes more than the positive classes. 
+
+##### overall, the decision tree we construct is not accurate even though it took into consideration the expensive class label but it classify many instances as other class labels when it supposed to be expensive.  
+
+
+#### Gain ratio - C5.0
+
+```{r}
+set.seed(1958)
+
+tree_model <- C5.0(myFormula, data = trainData)
+#plot(tree_model) unreadable tree
+
+
+testPred <- predict(tree_model, newdata = testData)
+
+tree_summary <- summary(tree_model)
+tree_summary
+
+results <- confusionMatrix(testPred, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+```
+
+##### the accuracy of the 80%-20% gain ratio = 70.83% which is the highest between all the gain ratio we've calculated.
+
+##### here is also the model chose CPU as the root an as we conclude previously CPU is appropriate to be the splitting attribute since it has a huge impact on the price of a laptop. 
+
+##### as we can see most of the class labels were classified correctly since the common label in our dataset is ideal price and it has the highest correct classification except for class expensive because it has a large number of incorrectly classification.   
+
+
+#### gini index
+
+```{r}
+fit.tree = rpart(myFormula, data=trainData, method = "class")
+fit.tree
+
+rpart.plot(fit.tree)
+
+pred.tree = predict(fit.tree, testData, type = "class")
+
+results <- confusionMatrix(pred.tree, testData$price, positive= "1")
+acc <- results$overall["Accuracy"]*100
+acc
+```
+
+##### same as all the previous gini index chose the CPU attribute to be the root since it has the lowest gini index. 
+##### gini index took into consideration the expensive class label which is something we didn't see in information gain and gain ratio but not as much as we expected.
+
+##### we conclude from the 80%-20% sampling that it is not best sampling to classify our dataset since it is misleading. 
+
+### Results : 
+
+##### From the 3 samplings we choose 70%-30% since it include most of the class labels especially expensive class label and has less misleading in the results, and from the classification mathods the most accurate one and appropriate for our dataset is gain ratio since our attributes is mixed between categorical, numeric and continuous attributes. 
+##### for 60%-40% it didn't include any of the expensive class label in the classification and this is not accurate so we didn't choose it. 
+##### and for 80%-20% even though it has the highest accuracy but it's misleading since it has a huge number of trainin set and it classified many instances as other class than the correct class which is expensive. 
+
